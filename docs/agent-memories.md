@@ -429,3 +429,64 @@ When saving a memory, append a new entry using this exact format:
 - **Significance:**
   Any agent resuming work should read this entry first to understand exactly where every file lives and what it does. Do not re-scaffold — build on this structure.
 - **Related Entries:** Infrastructure, Architecture Vision
+
+---
+
+## [2026-03-30 14:00] — Audit Finding: useMemo Geometry Bypasses R3F Automatic Disposal
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Insight
+- **Tags:** #r3f #threejs #react #3d #general-principle #debugging
+- **Memory:**
+  R3F was chosen specifically because it disposes geometries and materials automatically when components unmount — eliminating the GPU memory leak class that plagues imperative Three.js. However, the current `ScenePart.tsx` and `GroundGrid.tsx` implementations use `useMemo` to create `THREE.BufferGeometry` and `THREE.Material` objects imperatively, then pass them via props or `<primitive>`. This pattern **bypasses R3F's disposal lifecycle entirely** — old geometries are replaced in JS but never `.dispose()`d on the GPU side, leaking VRAM on every part update or unmount.
+
+  The fix is either: (a) add explicit `useEffect` cleanup that calls `.dispose()` on the old geometry/material when deps change, or (b) refactor to use R3F's declarative geometry elements (`<boxGeometry>`, `<cylinderGeometry>`, etc.) which R3F manages automatically.
+
+  General principle: **choosing a framework for its lifecycle guarantees only works if you stay within its declarative model.** The moment you drop to imperative object creation inside hooks, you inherit the manual cleanup burden the framework was supposed to eliminate. This applies to any framework with managed lifecycles (React DOM refs, R3F geometries, SwiftUI view lifecycle, etc.).
+- **Significance:**
+  This is the single most impactful bug in the current build — it causes unbounded VRAM growth during normal use. Any future agent adding new geometry types to `geometryFactory.ts` must ensure the calling component disposes properly. The irony of reintroducing the exact bug class the framework was chosen to prevent makes this a durable teaching example.
+- **Related Entries:** Framework Lifecycle Eliminates Bug Classes, Frontend Stack Decision, Three.js Rendering Patterns
+
+---
+
+## [2026-03-30 14:01] — Audit Finding: Observability Gap Between Design Intent and Implementation
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Correction
+- **Tags:** #observability #debugging #fastapi #python #pipeline #general-principle
+- **Memory:**
+  The agent-memories correctly identify "observability is architecture" and the debug panel was designed in from day one — but the implementation only delivers *frontend* observability. The backend has **zero logging**: no `import logging`, no structured log output, no request timing, no error recording. The Gemini API call, JSON extraction, and database operations are all black boxes from the server's perspective.
+
+  This means:
+  - When the Gemini API returns an error, there is no server-side record
+  - When extraction silently falls back to `{"parts": []}`, nothing is logged
+  - When a database write fails, the exception is caught and re-raised as a generic HTTP 500 with no audit trail
+  - Security events (missing API key, oversized uploads, malformed requests) are invisible
+
+  The debug panel covers the *happy path's failure mode* (bad LLM output → user sees raw response). It does not cover operational failure modes (API down, extraction regression, DB corruption, abuse).
+
+  General principle: **frontend observability and backend observability serve different audiences and catch different failure classes.** Designing one does not satisfy the requirement for the other. The debug panel helps the *user* diagnose bad LLM output; server logging helps the *operator* diagnose system health. Both are needed.
+- **Significance:**
+  Any agent adding logging should instrument these points in order of priority: (1) render endpoint entry/exit with timing, (2) Gemini API call result and latency, (3) extraction outcome (success/fallback/failure), (4) unhandled exceptions with full traceback. Use Python's `logging` module with JSON formatter for Docker log aggregation.
+- **Related Entries:** Observability Is Architecture, Gemini JSON Extraction, Infrastructure
+
+---
+
+## [2026-03-30 14:02] — Audit Finding: Input Validation Absent at Every System Boundary
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Correction
+- **Tags:** #fastapi #python #security #architecture #general-principle
+- **Memory:**
+  The backend accepts external input at multiple boundaries — file uploads, JSON request bodies, URL path parameters — and validates **none of them** beyond what FastAPI/Pydantic provides by default (type coercion). Specific gaps:
+
+  1. **File upload** (`POST /api/render`): No size limit, no content-type allowlist, no magic-byte check. A 2GB upload causes OOM. A non-image file reaches the Gemini API unchecked.
+  2. **String fields** (`name` in SaveModel, RenameModel, CreateScene): No `max_length`. Unbounded strings can bloat the database.
+  3. **List fields** (`parts` in SaveModel): No `max_items`, no element shape validation. A 100K-element array is accepted.
+  4. **Float fields** (`pos_x/y/z`, `scale_x/y/z` in AddInstance): No bounds. `1e308` is a valid position.
+  5. **`parts_json` from database**: Parsed with `json.loads()` in multiple endpoints with no try/except — corrupted data crashes the service.
+
+  General principle: **validate at every system boundary, not just the outermost one.** The LLM output is validated (extractor), but user input to the API and data read back from the database are trusted implicitly. System boundaries include: user → API, API → database, database → API (read-back), API → external service (Gemini). Each crossing deserves validation proportional to the trust level of the source.
+- **Significance:**
+  The file upload gap is the most urgent (DoS via large file). The `json.loads` gap is the most surprising (data the system itself wrote can crash it on read-back). Fixing these requires adding `Field()` constraints to Pydantic models and wrapping `json.loads` calls — straightforward but must be done systematically across all endpoints.
+- **Related Entries:** Observability Gap, Implemented Project Structure
