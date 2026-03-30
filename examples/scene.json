@@ -1,0 +1,730 @@
+{
+  "parts": [
+    {
+      "label": "board",
+      "geometryType": "box",
+      "width": 0.55,
+      "height": 0.02,
+      "depth": 0.35,
+      "position": {
+        "x": 0,
+        "y": 0.01,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#6D4C41"
+    },
+    {
+      "label": "burger-bottom-bun",
+      "geometryType": "lathe",
+      "profilePoints": [
+        {
+          "x": 0,
+          "y": -0.0075
+        },
+        {
+          "x": 0.042,
+          "y": -0.0075
+        },
+        {
+          "x": 0.045,
+          "y": -0.002
+        },
+        {
+          "x": 0.046,
+          "y": 0.002
+        },
+        {
+          "x": 0.048,
+          "y": 0.0075
+        },
+        {
+          "x": 0,
+          "y": 0.0075
+        }
+      ],
+      "segments": 64,
+      "position": {
+        "x": 0,
+        "y": 0.0275,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#D2A679"
+    },
+    {
+      "label": "burger-lettuce",
+      "geometryType": "extrude",
+      "pathCommands": [
+        {
+          "op": "M",
+          "x": 0.06,
+          "y": 0
+        },
+        {
+          "op": "Q",
+          "x": 0.07,
+          "y": 0.04,
+          "cp1x": 0.08,
+          "cp1y": 0.02
+        },
+        {
+          "op": "Q",
+          "x": 0.03,
+          "y": 0.07,
+          "cp1x": 0.05,
+          "cp1y": 0.075
+        },
+        {
+          "op": "Q",
+          "x": -0.02,
+          "y": 0.065,
+          "cp1x": 0,
+          "cp1y": 0.08
+        },
+        {
+          "op": "Q",
+          "x": -0.06,
+          "y": 0.03,
+          "cp1x": -0.07,
+          "cp1y": 0.055
+        },
+        {
+          "op": "Q",
+          "x": -0.065,
+          "y": -0.02,
+          "cp1x": -0.08,
+          "cp1y": 0
+        },
+        {
+          "op": "Q",
+          "x": -0.03,
+          "y": -0.06,
+          "cp1x": -0.055,
+          "cp1y": -0.07
+        },
+        {
+          "op": "Q",
+          "x": 0.02,
+          "y": -0.065,
+          "cp1x": 0,
+          "cp1y": -0.08
+        },
+        {
+          "op": "Q",
+          "x": 0.06,
+          "y": 0,
+          "cp1x": 0.07,
+          "cp1y": -0.04
+        }
+      ],
+      "depth": 0.005,
+      "bevelEnabled": false,
+      "position": {
+        "x": 0,
+        "y": 0.0375,
+        "z": 0
+      },
+      "rotation": {
+        "x": -1.5708,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#558B2F"
+    },
+    {
+      "label": "burger-patty-1",
+      "geometryType": "cylinder",
+      "radiusTop": 0.048,
+      "radiusBottom": 0.048,
+      "height": 0.015,
+      "position": {
+        "x": 0,
+        "y": 0.0475,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#4E342E"
+    },
+    {
+      "label": "burger-cheese-1",
+      "geometryType": "box",
+      "width": 0.08,
+      "height": 0.002,
+      "depth": 0.08,
+      "position": {
+        "x": 0,
+        "y": 0.056,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0.785,
+        "z": 0
+      },
+      "color": "#FFB300"
+    },
+    {
+      "label": "burger-patty-2",
+      "geometryType": "cylinder",
+      "radiusTop": 0.048,
+      "radiusBottom": 0.048,
+      "height": 0.015,
+      "position": {
+        "x": 0,
+        "y": 0.0645,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#4E342E"
+    },
+    {
+      "label": "burger-cheese-2",
+      "geometryType": "box",
+      "width": 0.08,
+      "height": 0.002,
+      "depth": 0.08,
+      "position": {
+        "x": 0,
+        "y": 0.073,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0.4,
+        "z": 0
+      },
+      "color": "#FFB300"
+    },
+    {
+      "label": "burger-pickle-1",
+      "geometryType": "cylinder",
+      "radiusTop": 0.015,
+      "radiusBottom": 0.015,
+      "height": 0.004,
+      "position": {
+        "x": 0.02,
+        "y": 0.076,
+        "z": 0.02
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#2E7D32"
+    },
+    {
+      "label": "burger-pickle-2",
+      "geometryType": "cylinder",
+      "radiusTop": 0.015,
+      "radiusBottom": 0.015,
+      "height": 0.004,
+      "position": {
+        "x": -0.02,
+        "y": 0.076,
+        "z": -0.01
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#2E7D32"
+    },
+    {
+      "label": "burger-top-bun",
+      "geometryType": "lathe",
+      "profilePoints": [
+        {
+          "x": 0,
+          "y": -0.0175
+        },
+        {
+          "x": 0.048,
+          "y": -0.0175
+        },
+        {
+          "x": 0.05,
+          "y": -0.01
+        },
+        {
+          "x": 0.045,
+          "y": 0.005
+        },
+        {
+          "x": 0.035,
+          "y": 0.012
+        },
+        {
+          "x": 0.015,
+          "y": 0.016
+        },
+        {
+          "x": 0,
+          "y": 0.0175
+        }
+      ],
+      "segments": 64,
+      "position": {
+        "x": 0,
+        "y": 0.0955,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#C68E58"
+    },
+    {
+      "label": "glass-body",
+      "geometryType": "lathe",
+      "profilePoints": [
+        {
+          "x": 0,
+          "y": -0.075
+        },
+        {
+          "x": 0.025,
+          "y": -0.075
+        },
+        {
+          "x": 0.027,
+          "y": -0.06
+        },
+        {
+          "x": 0.03,
+          "y": -0.03
+        },
+        {
+          "x": 0.032,
+          "y": 0
+        },
+        {
+          "x": 0.035,
+          "y": 0.03
+        },
+        {
+          "x": 0.038,
+          "y": 0.06
+        },
+        {
+          "x": 0.04,
+          "y": 0.075
+        },
+        {
+          "x": 0,
+          "y": 0.075
+        }
+      ],
+      "segments": 64,
+      "position": {
+        "x": 0.15,
+        "y": 0.095,
+        "z": -0.04
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#E0F7FA"
+    },
+    {
+      "label": "glass-liquid-beer",
+      "geometryType": "cylinder",
+      "radiusTop": 0.036,
+      "radiusBottom": 0.027,
+      "height": 0.12,
+      "position": {
+        "x": 0.15,
+        "y": 0.085,
+        "z": -0.04
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#D4AF37"
+    },
+    {
+      "label": "glass-foam",
+      "geometryType": "cylinder",
+      "radiusTop": 0.038,
+      "radiusBottom": 0.036,
+      "height": 0.02,
+      "position": {
+        "x": 0.15,
+        "y": 0.155,
+        "z": -0.04
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#FFFFFF"
+    },
+    {
+      "label": "fries-cone",
+      "geometryType": "cone",
+      "radius": 0.05,
+      "height": 0.15,
+      "position": {
+        "x": -0.16,
+        "y": 0.095,
+        "z": -0.02
+      },
+      "rotation": {
+        "x": 3.14159,
+        "y": 0,
+        "z": 0.15
+      },
+      "color": "#F5E6D3"
+    },
+    {
+      "label": "fry-1",
+      "geometryType": "box",
+      "width": 0.01,
+      "height": 0.08,
+      "depth": 0.01,
+      "position": {
+        "x": -0.16,
+        "y": 0.14,
+        "z": -0.03
+      },
+      "rotation": {
+        "x": 0.1,
+        "y": 0.2,
+        "z": 0.2
+      },
+      "color": "#FBC02D"
+    },
+    {
+      "label": "fry-2",
+      "geometryType": "box",
+      "width": 0.01,
+      "height": 0.09,
+      "depth": 0.01,
+      "position": {
+        "x": -0.15,
+        "y": 0.145,
+        "z": -0.01
+      },
+      "rotation": {
+        "x": -0.1,
+        "y": -0.1,
+        "z": -0.1
+      },
+      "color": "#FBC02D"
+    },
+    {
+      "label": "fry-3",
+      "geometryType": "box",
+      "width": 0.01,
+      "height": 0.07,
+      "depth": 0.01,
+      "position": {
+        "x": -0.17,
+        "y": 0.13,
+        "z": -0.01
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0.5,
+        "z": 0.3
+      },
+      "color": "#FBC02D"
+    },
+    {
+      "label": "fry-4",
+      "geometryType": "box",
+      "width": 0.01,
+      "height": 0.08,
+      "depth": 0.01,
+      "position": {
+        "x": -0.18,
+        "y": 0.15,
+        "z": -0.02
+      },
+      "rotation": {
+        "x": 0.2,
+        "y": 0.1,
+        "z": -0.2
+      },
+      "color": "#FBC02D"
+    },
+    {
+      "label": "fry-5",
+      "geometryType": "box",
+      "width": 0.01,
+      "height": 0.06,
+      "depth": 0.01,
+      "position": {
+        "x": -0.14,
+        "y": 0.135,
+        "z": -0.02
+      },
+      "rotation": {
+        "x": -0.2,
+        "y": 0.8,
+        "z": -0.3
+      },
+      "color": "#FBC02D"
+    },
+    {
+      "label": "dip-bowl-left",
+      "geometryType": "lathe",
+      "profilePoints": [
+        {
+          "x": 0,
+          "y": -0.01
+        },
+        {
+          "x": 0.02,
+          "y": -0.01
+        },
+        {
+          "x": 0.023,
+          "y": -0.007
+        },
+        {
+          "x": 0.025,
+          "y": 0.005
+        },
+        {
+          "x": 0.027,
+          "y": 0.01
+        },
+        {
+          "x": 0.022,
+          "y": 0.01
+        },
+        {
+          "x": 0.02,
+          "y": 0.005
+        },
+        {
+          "x": 0.018,
+          "y": -0.005
+        },
+        {
+          "x": 0,
+          "y": -0.005
+        }
+      ],
+      "segments": 64,
+      "position": {
+        "x": -0.08,
+        "y": 0.03,
+        "z": 0.08
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#E0E0D1"
+    },
+    {
+      "label": "dip-liquid-white",
+      "geometryType": "cylinder",
+      "radiusTop": 0.018,
+      "radiusBottom": 0.018,
+      "height": 0.012,
+      "position": {
+        "x": -0.08,
+        "y": 0.028,
+        "z": 0.08
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#FFFDD0"
+    },
+    {
+      "label": "dip-bowl-right",
+      "geometryType": "lathe",
+      "profilePoints": [
+        {
+          "x": 0,
+          "y": -0.01
+        },
+        {
+          "x": 0.02,
+          "y": -0.01
+        },
+        {
+          "x": 0.023,
+          "y": -0.007
+        },
+        {
+          "x": 0.025,
+          "y": 0.005
+        },
+        {
+          "x": 0.027,
+          "y": 0.01
+        },
+        {
+          "x": 0.022,
+          "y": 0.01
+        },
+        {
+          "x": 0.02,
+          "y": 0.005
+        },
+        {
+          "x": 0.018,
+          "y": -0.005
+        },
+        {
+          "x": 0,
+          "y": -0.005
+        }
+      ],
+      "segments": 64,
+      "position": {
+        "x": 0.02,
+        "y": 0.03,
+        "z": 0.09
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#E0E0D1"
+    },
+    {
+      "label": "dip-liquid-red",
+      "geometryType": "cylinder",
+      "radiusTop": 0.018,
+      "radiusBottom": 0.018,
+      "height": 0.012,
+      "position": {
+        "x": 0.02,
+        "y": 0.028,
+        "z": 0.09
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#B71C1C"
+    },
+    {
+      "label": "tomato-1",
+      "geometryType": "sphere",
+      "radius": 0.016,
+      "position": {
+        "x": 0.11,
+        "y": 0.036,
+        "z": 0.07
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#D32F2F"
+    },
+    {
+      "label": "tomato-2",
+      "geometryType": "sphere",
+      "radius": 0.017,
+      "position": {
+        "x": 0.15,
+        "y": 0.037,
+        "z": 0.08
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#D32F2F"
+    },
+    {
+      "label": "tomato-3",
+      "geometryType": "sphere",
+      "radius": 0.015,
+      "position": {
+        "x": 0.18,
+        "y": 0.035,
+        "z": 0.05
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#D32F2F"
+    },
+    {
+      "label": "tomato-vine",
+      "geometryType": "tube",
+      "tubePoints": [
+        {
+          "x": 0.11,
+          "y": 0.052,
+          "z": 0.07
+        },
+        {
+          "x": 0.13,
+          "y": 0.06,
+          "z": 0.075
+        },
+        {
+          "x": 0.15,
+          "y": 0.054,
+          "z": 0.08
+        },
+        {
+          "x": 0.165,
+          "y": 0.055,
+          "z": 0.07
+        },
+        {
+          "x": 0.18,
+          "y": 0.05,
+          "z": 0.05
+        }
+      ],
+      "tubeRadius": 0.0015,
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "color": "#2E7D32"
+    }
+  ]
+}

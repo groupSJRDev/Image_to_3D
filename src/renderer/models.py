@@ -21,12 +21,10 @@ class Scene(SQLModel, table=True):
 class SceneInstance(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     scene_id: int = Field(
-        foreign_key="scene.id", index=True,
-        sa_column_kwargs={"ondelete": "CASCADE"},
+        sa_column=sa.Column(sa.Integer, sa.ForeignKey("scene.id", ondelete="CASCADE"), index=True, nullable=False),
     )
     model_id: int = Field(
-        foreign_key="storedmodel.id", index=True,
-        sa_column_kwargs={"ondelete": "CASCADE"},
+        sa_column=sa.Column(sa.Integer, sa.ForeignKey("storedmodel.id", ondelete="CASCADE"), index=True, nullable=False),
     )
     pos_x: float = 0.0
     pos_y: float = 0.0

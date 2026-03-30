@@ -551,3 +551,160 @@ When saving a memory, append a new entry using this exact format:
 - **Significance:**
   Prevents future agents from attempting a risky version downgrade. The examples and the React app use different rendering approaches (imperative vs. R3F) so version parity is not required.
 - **Related Entries:** Three.js Rendering Patterns, Frontend Stack Decision
+
+---
+
+## [2026-03-30 18:00] — Docker: Poetry Virtualenv + Non-Root User Requires In-Project Venv
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Insight
+- **Tags:** #docker #python #architecture #debugging #general-principle
+- **Memory:**
+  Poetry by default creates virtualenvs in `~/.cache/pypoetry/virtualenvs/` — which belongs to the user that ran `poetry install`. If `poetry install` runs as root during `docker build` and then `USER` switches to a non-root user, the venv is inaccessible.
+
+  The fix is `ENV POETRY_VIRTUALENVS_IN_PROJECT=true` in the Dockerfile, which creates the venv at `/app/.venv/`. Then `chown -R` transfers ownership to the non-root user along with all other `/app` contents. Commands (CMD, compose command) must reference `/app/.venv/bin/uvicorn` directly — not bare `uvicorn` (not on PATH) and not `poetry run` (Poetry itself may not be on the non-root user's PATH either).
+
+  Additionally, `--no-root` skips installing the project package itself. To make the `renderer` module importable, set `ENV PYTHONPATH=/app/src` rather than attempting `poetry install --only-root` (which fails if README.md or other metadata files aren't in the container).
+
+  General principle: **when a build tool installs as one user and the app runs as another, all artifacts must live under a shared, chown'd directory — not in user-specific caches.**
+- **Significance:**
+  This combination (Poetry + non-root Docker) is a common stumbling block. The three pieces — `VIRTUALENVS_IN_PROJECT`, `PYTHONPATH`, and direct venv bin paths — must all be in place together. Missing any one causes a different cryptic error.
+- **Related Entries:** Infrastructure, Container Security
+
+---
+
+## [2026-03-30 18:01] — Docker: node:20-slim Has UID 1000 Already Taken
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Correction
+- **Tags:** #docker #debugging
+- **Memory:**
+  The `node:20-slim` Docker image ships with a `node` user at UID 1000. Attempting `useradd -u 1000 app` fails with "UID 1000 is not unique". The user also has other Docker projects that may claim common UIDs.
+
+  Fix: use a project-specific username (`vmlapp`) and a less common UID (`1500`). Alternatively, reuse the existing `node` user in Node-based images — but a unique UID is safer when the host runs multiple container projects.
+- **Significance:**
+  Always check what users/UIDs exist in base images before creating new ones. `node`, `www-data`, and similar are commonly pre-allocated.
+- **Related Entries:** Container Security, Infrastructure
+
+---
+
+## [2026-03-30 18:02] — Docker: Volume-Mounted SQLite File Must Pre-Exist as a File
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Correction
+- **Tags:** #docker #database #debugging
+- **Memory:**
+  `docker-compose.yml` mounts `./renderer.db:/app/renderer.db`. If `renderer.db` does not exist on the host when Docker Compose starts, Docker creates it as a **directory** (not a file). SQLite then fails with `unable to open database file` because it can't create a database inside a directory.
+
+  Fix: `touch renderer.db` on the host before first `docker compose up`. If the directory was already created by a prior failed start, `rmdir renderer.db` first, then `touch`.
+- **Significance:**
+  This is a well-known Docker gotcha with bind mounts to files. Any bind-mounted file (SQLite DBs, config files, secrets) must exist as a file on the host before the container starts.
+- **Related Entries:** Infrastructure, Database Design
+
+---
+
+## [2026-03-30 18:03] — SQLModel: sa_column_kwargs ondelete Goes on ForeignKey, Not Column
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Correction
+- **Tags:** #database #sqlmodel #python #debugging
+- **Memory:**
+  The implementation plan suggested `sa_column_kwargs={"ondelete": "CASCADE"}` on SQLModel `Field()`. This fails at runtime with `TypeError: Additional arguments should be named <dialectname>_<argument>, got 'ondelete'` because `ondelete` is a `ForeignKey` argument, not a `Column` argument.
+
+  The correct SQLModel pattern for cascade deletes:
+  ```python
+  scene_id: int = Field(
+      sa_column=sa.Column(sa.Integer, sa.ForeignKey("scene.id", ondelete="CASCADE"), index=True, nullable=False),
+  )
+  ```
+  This uses `sa_column` to define the full SQLAlchemy column directly, placing `ondelete` on the `ForeignKey` constructor where it belongs.
+- **Significance:**
+  The `sa_column_kwargs` approach is widely suggested online but doesn't work for FK-level options. Future agents should use `sa_column` with explicit `sa.ForeignKey()` for cascade deletes. This is a SQLModel-specific pitfall — raw SQLAlchemy's declarative syntax handles it differently.
+- **Related Entries:** Database Design, Cascade Deletes
+
+---
+
+## [2026-03-30 18:04] — Bug Fix: listModels API Does Not Return Parts Array
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Correction
+- **Tags:** #react #api #pipeline #debugging
+- **Memory:**
+  `GET /api/models` returns `{id, name, part_count, created_at}` — deliberately lightweight for the sidebar list. It does **not** include the `parts` array. The original `handleAddToScene` in `App.tsx` tried to find parts from the models list (`models.find(m => m.id === model.id)?.parts`), which was always `undefined`, resulting in empty scenes when clicking "+ Scene".
+
+  Fix: call `getModel(model.id)` (which hits `GET /api/models/{id}` and returns the full `parts` array) before constructing the `SceneInstance`.
+
+  General principle: **when a list endpoint is intentionally lean, any operation that needs the full object must call the detail endpoint.** Don't assume list items have the same shape as detail items — they rarely do for performance reasons.
+- **Significance:**
+  This was a pre-existing bug in the original build, not introduced by the hardening. The "save to library then add to scene" flow was never tested end-to-end. Highlights the value of the audit's finding 4.1 (no tests) — this is exactly the kind of integration gap that an E2E test would catch.
+- **Related Entries:** Architecture Vision, Implemented Project Structure
+
+---
+
+## [2026-03-30 18:05] — Poetry Lock Must Be Regenerated After Dependency Changes
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Correction
+- **Tags:** #python #docker #debugging
+- **Memory:**
+  Adding `slowapi` to `pyproject.toml` and tightening version bounds (`>=X,<Y`) made `poetry.lock` stale. The Docker build failed with `pyproject.toml changed significantly since poetry.lock was last generated`. Fix: run `poetry lock` locally before building.
+
+  Additionally, Poetry is strict about Python range compatibility. `slowapi` declares `python >=3.7,<4.0`, so our `requires-python = ">=3.11"` (unbounded) conflicted. Adding `<4.0` to match resolved it: `requires-python = ">=3.11,<4.0"`.
+
+  General principle: **any change to `pyproject.toml` dependencies or Python version requires `poetry lock` before Docker build.** The lock file is a build artifact, not just a convenience.
+- **Significance:**
+  This is easy to forget when editing `pyproject.toml` directly rather than using `poetry add`. Future agents changing dependencies must always regenerate the lock file.
+- **Related Entries:** Infrastructure, Loose Dependency Pinning
+
+---
+
+## [2026-03-30 20:00] — Design Pattern: Sparse Nullable Overrides for Layered Mutability
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Insight
+- **Tags:** #database #architecture #general-principle #schema #creative-thinking
+- **Memory:**
+  When designing the per-part editing feature (position, rotation, opacity), the core tension was: `StoredModel.parts_json` is immutable (a key architectural invariant), but users need to modify individual part transforms and add new properties (opacity) that the LLM never generated.
+
+  The solution is a **sparse nullable override table** (`PartOverride`). Each row targets a single part by `(model_id, part_label)`. Every editable field is `Optional[float]` — `None` means "use the base value from parts_json", a float means "replace this specific axis/property". The merge is simple: load base parts, load overrides as a `{label → row}` lookup, apply non-null fields.
+
+  Why absolute values, not deltas: if the LLM base is ever re-generated (re-render from the same image), deltas become meaningless because the reference point changed. Absolute overrides are self-contained — they don't depend on the base to be interpreted. When the user hits "Reset to Original", just delete the override row.
+
+  Why per-field nullability instead of a full transform JSON blob: the user may only tweak Y position and opacity on a given part. Storing a full `{pos_x, pos_y, pos_z, rot_x, rot_y, rot_z, opacity}` blob forces the client to echo back all values even if unchanged, and makes it impossible to distinguish "user set X to 0.0" from "user didn't touch X". With nullable fields, the database knows exactly which values are user-set.
+
+  This pattern generalises: **whenever you need to layer user edits on top of generated/computed data without mutating the source, use a sparse override table keyed on the generated item's identity.** The override is a transparent lens — apply it to see the user's version, remove it to see the original.
+- **Significance:**
+  Applies to any system where AI/ML generates a baseline and users refine it: design tools, code generation with manual edits, recommendation systems with user overrides, auto-generated reports with manual corrections. The key insight is that the override table preserves the original while making edits first-class persistent data.
+- **Related Entries:** Immutable Data + Mutable Transform, Database Design, StoredModel Immutability
+
+---
+
+## [2026-03-30 20:01] — R3F: TransformControls and OrbitControls Coexistence
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Reference
+- **Tags:** #r3f #threejs #react #3d
+- **Memory:**
+  `@react-three/drei`'s `TransformControls` (translate/rotate gizmo) and `OrbitControls` (camera orbit) conflict by default — both respond to pointer drag. The solution is already in place: `OrbitControls` has `makeDefault` set in `SceneCanvas.tsx`. When `TransformControls` is active and the user drags a gizmo handle, it automatically disables `OrbitControls` for the duration of the drag. This works because `makeDefault` registers OrbitControls as the default controls, and TransformControls knows to temporarily detach them.
+
+  Without `makeDefault`, the developer would need to manually wire `TransformControls`'s `onMouseDown`/`onMouseUp` events to toggle `OrbitControls.enabled`. The declarative approach is correct here — do not add manual enable/disable logic.
+- **Significance:**
+  Any future agent adding interactive gizmos (scale handles, custom drag behaviors) should follow the same pattern: ensure `OrbitControls` has `makeDefault`, and the drei helper components will handle the conflict automatically.
+- **Related Entries:** Three.js Rendering Patterns, Frontend Stack Decision
+
+---
+
+## [2026-03-30 20:02] — Feature Design: Validate Override Keys Against Source Data
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Insight
+- **Tags:** #database #architecture #general-principle #pipeline
+- **Memory:**
+  When the per-part override system accepts a `part_label` from the client, the backend must validate that the label actually exists in the model's `parts_json` before creating the override row. Without this check, the API silently accepts overrides for nonexistent labels — orphaned rows that inflate the database and confuse debugging.
+
+  General principle: **when a secondary table references a field inside a JSON blob (not a proper FK), validate the reference manually on write.** This is the cost of denormalized storage — the database can't enforce referential integrity between a JSON array element and a row in another table. The application must do it.
+
+  This also applies to deletion: if a model's `parts_json` were ever regenerated with different labels (not currently possible since StoredModel is immutable, but relevant for future features), orphaned overrides would need cleanup.
+- **Significance:**
+  JSON-blob-to-relational joins are a common pattern in LLM-powered systems where the AI output is stored as a blob but downstream features need to reference individual elements. Always validate the join key on write — don't trust the client to send valid references into opaque data.
+- **Related Entries:** Sparse Nullable Overrides, Input Validation at System Boundaries

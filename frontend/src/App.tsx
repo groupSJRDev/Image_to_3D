@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { renderImage, saveModel, addModelToScene, createScene, ApiError } from "./api";
+import { renderImage, saveModel, addModelToScene, createScene, getModel, ApiError } from "./api";
 import type { ScenePart, SceneInstance, StoredModel } from "./types";
 import { SceneCanvas } from "./three/SceneCanvas";
 import { UploadPanel } from "./components/UploadPanel";
@@ -56,8 +56,8 @@ export default function App() {
       setSceneId(sid);
     }
     const inst = await addModelToScene(sid, model.id);
-    // Fetch full parts from model (already in library list if loaded)
-    const modelWithParts = models.find((m) => m.id === model.id);
+    // Fetch full model with parts from API
+    const fullModel = await getModel(model.id);
     const newInstance: SceneInstance = {
       id: (inst as SceneInstance).id,
       model_id: (inst as SceneInstance).model_id,
@@ -65,7 +65,7 @@ export default function App() {
       position: (inst as SceneInstance).position,
       rotation: (inst as SceneInstance).rotation,
       scale: (inst as SceneInstance).scale,
-      parts: modelWithParts?.parts ?? [],
+      parts: fullModel.parts ?? [],
     };
     setInstances((prev) => [...prev, newInstance]);
     } finally {
