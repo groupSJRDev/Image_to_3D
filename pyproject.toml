@@ -17,11 +17,29 @@ dependencies = [
     "slowapi>=0.1.9,<1.0.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4.0,<1.0.0",
+    "mypy>=1.10.0,<2.0.0",
+]
+
 [project.scripts]
 renderer = "renderer.server:start"
 
 [tool.poetry]
 packages = [{include = "renderer", from = "src"}]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008"]  # Depends() and File() in FastAPI defaults is the standard pattern
+
+[tool.ruff.lint.per-file-ignores]
+"src/renderer/server.py" = ["B904"]  # HTTPException re-raises don't need 'from' chains
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

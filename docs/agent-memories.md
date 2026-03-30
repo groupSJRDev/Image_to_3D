@@ -973,3 +973,67 @@ When saving a memory, append a new entry using this exact format:
   Any schema change that adds tables requires this reset in development. The project does not use Alembic. For production (if this ever goes there), a proper migration tool would be needed. Until then, document that saved models are lost on schema changes and use "Download JSON" to export before resetting.
 - **Related Entries:** Docker: Volume-Mounted SQLite File Must Pre-Exist as a File, Database Design
 
+---
+
+## [2026-03-30 22:00] — LLM Label Prefixes Encode Implicit Hierarchy — Exploit It, Don't Duplicate It
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Insight
+- **Tags:** #llm #prompting #schema #architecture #general-principle #creative-thinking
+- **Memory:**
+  The decode prompt instructs the LLM to label parts with object prefixes (e.g., `"glass-body"`, `"burger-top-bun"`). This is already producing consistent, parseable group hierarchies in the output — `burger-*`, `beer-*`, `fry-*`, `tomato-*`, etc. The grouping information is already in the data; the system just wasn't using it.
+
+  When the question came up of whether to modify the prompt to add an explicit `"group": "burger"` field, the answer was **no** — for two reasons:
+  1. **Redundancy creates inconsistency risk.** Asking the LLM to output both `"label": "burger-patty-top"` and `"group": "burger"` means it can get them out of sync. One source of truth is better than two.
+  2. **Deterministic parsing beats LLM output.** Splitting a label on its first hyphen to extract a group prefix is trivial, deterministic code. Asking the LLM to state the group name separately is another field it could hallucinate or omit.
+
+  General principle: **when an LLM already encodes structure in a naming convention, extract that structure with deterministic code — don't ask the LLM to restate it in a separate field.** This applies to any LLM output with hierarchical labels, namespaced identifiers, or prefixed enums. Parse the convention; don't duplicate it.
+- **Significance:**
+  This is a recurring design question in LLM-powered systems: "should we change the prompt to get richer output, or extract more from the output we already have?" Default to extraction when the information is already present in a parseable form. Prompt changes should add *new* information, not restate existing information in a more convenient format.
+- **Related Entries:** LLM Prompting Strategy, Stay in Language Space, The Prompt as a First-Class Engineering Artifact
+
+---
+
+## [2026-03-30 22:01] — Users Think in Semantic Groups, Not Geometric Primitives
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Insight
+- **Tags:** #ui #3d #r3f #architecture #general-principle
+- **Memory:**
+  User testing revealed that per-part selection is insufficient for real models. A burger scene has 34 parts, but the user's mental model has ~7 objects: burger, beer, fries, ketchup, mayo, tomatoes, board. Moving `burger-patty-top` without the rest of the burger is useless. Moving `beer-glass` without `beer-liquid` and `beer-foam` breaks the model.
+
+  The per-part editing feature (override system, opacity, TransformControls) is correct as infrastructure, but the primary interaction layer must be **groups**, with per-part editing as a secondary precision mode (Alt+click).
+
+  The implementation pattern: wrap related parts in a Three.js `<group>` element (same pattern `ModelGroup.tsx` already uses for composed scenes). `TransformControls` attaches to the group, so all children move together. This reuses existing R3F infrastructure — no new Three.js concepts needed.
+
+  Two selection levels:
+  - **Group mode** (default): click any part → selects its group → gizmo on the `<group>`
+  - **Part mode** (Alt+click): selects individual part → gizmo on the `<mesh>`
+
+  Persist group moves via existing `PartOverride` infrastructure: compute the delta from the group gizmo, apply it to each part's position, batch-save overrides. No new DB tables needed.
+- **Significance:**
+  This is a UX principle that applies to any system rendering structured LLM output: **the user's interaction granularity should match their mental model, not the data model's granularity.** The data model can be flat (parts array), but the interaction model must surface the hierarchy the user expects. Always test with real output to discover the gap.
+- **Related Entries:** Sparse Nullable Overrides, Immutable Data + Mutable Transform, Label Prefixes Encode Implicit Hierarchy
+
+---
+
+## [2026-03-30 22:02] — Small Parts Are Unclickable: Gizmo Sizing and Hit Targets Matter
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Correction
+- **Tags:** #r3f #threejs #ui #3d #debugging
+- **Memory:**
+  Parts like individual fries (0.01m wide), pickle slices (0.018m radius), and tomato stems (0.002m radius) are nearly impossible to click in the 3D canvas. The Three.js raycaster hits them only at very specific angles, and the TransformControls gizmo handles may be larger than the part itself.
+
+  This is a fundamental issue with per-part selection on small geometry: **the clickable surface area scales with the geometry dimensions, not with the viewport pixel size.** A 0.002m cylinder is 2 pixels wide at typical camera distance.
+
+  Group selection solves this for most use cases — clicking the beer glass (large) selects the entire beer group including the foam (small). For the remaining case (Alt+click on a specific small part), consider:
+  - Expanding the raycaster threshold for small objects
+  - Showing a parts list in the properties panel that allows selection by name instead of by click
+  - Adding a bounding-box overlay that provides a larger click target
+
+  A clickable parts list in the UI is the most reliable solution — it doesn't depend on geometry size at all.
+- **Significance:**
+  Any 3D editing tool with variable-size objects needs a non-spatial selection mechanism (list, search, hierarchy tree) as a fallback. Spatial selection alone fails at the extremes of object scale.
+- **Related Entries:** Users Think in Semantic Groups, TransformControls and OrbitControls Coexistence
+

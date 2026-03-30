@@ -61,7 +61,7 @@ def _normalise(parsed) -> dict:
         if "parts" in parsed:
             return parsed
         # Some responses wrap in {"objects": [...]} or similar
-        for key, val in parsed.items():
+        for _key, val in parsed.items():
             if isinstance(val, list):
                 return {"parts": val}
     raise ExtractionError(

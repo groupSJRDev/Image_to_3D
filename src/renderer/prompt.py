@@ -26,10 +26,7 @@ Rules:
 def validate_prompt_exists() -> None:
     """Call at startup to fail fast if the prompt file is missing."""
     if not _PROMPT_PATH.exists():
-        raise FileNotFoundError(
-            f"Prompt file not found at {_PROMPT_PATH}. "
-            "Ensure the examples/ directory is present."
-        )
+        raise FileNotFoundError(f"Prompt file not found at {_PROMPT_PATH}. Ensure the examples/ directory is present.")
 
 
 def load_prompt() -> str:
