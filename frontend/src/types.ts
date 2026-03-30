@@ -24,6 +24,7 @@ export interface ScenePart {
   position: Vec3;
   rotation: Vec3;
   opacity?: number;   // 0.0–1.0, default 1.0; merged from PartOverride on backend
+  group?: string;     // auto-derived from label prefix, e.g. "burger", "beer"
   scale?: Vec3;
   // box
   width?: number;
@@ -117,3 +118,15 @@ export interface PartOverrideRequest {
 }
 
 export type EditMode = "translate" | "rotate";
+export type SelectionMode = "group" | "part";
+
+export interface BatchOverrideItem {
+  part_label: string;
+  pos_x?: number | null;
+  pos_y?: number | null;
+  pos_z?: number | null;
+  rot_x?: number | null;
+  rot_y?: number | null;
+  rot_z?: number | null;
+  opacity?: number | null;
+}

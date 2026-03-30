@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { renderImage, saveModel, addModelToScene, createScene, getModel, ApiError } from "./api";
-import type { ScenePart, SceneInstance, StoredModel } from "./types";
+import type { ScenePart, SceneInstance, StoredModel, Vec3 } from "./types";
+import { groupPartsByPrefix, getGroupPrefix } from "./utils/groupParts";
 import { SceneCanvas } from "./three/SceneCanvas";
 import { UploadPanel } from "./components/UploadPanel";
 import { StatusBar, type Status } from "./components/StatusBar";
 import { ToolBar } from "./components/ToolBar";
 import { DebugPanel } from "./components/DebugPanel";
 import { ModelLibrary } from "./components/ModelLibrary";
-import { PartProperties } from "./components/PartProperties";
+import { PartProperties, GroupProperties } from "./components/PartProperties";
 import { useModels } from "./hooks/useModels";
 import { usePartEditor } from "./hooks/usePartEditor";
 
@@ -26,30 +27,55 @@ export default function App() {
   const {
     selectedLabel,
     setSelectedLabel,
+    selectedGroup,
+    setSelectedGroup,
+    selectionMode,
+    setSelectionMode,
     editMode,
     setEditMode,
+    clearSelection,
     handleTransformEnd,
+    handleGroupTransformEnd,
     handleOpacityChange,
     handlePositionInputChange,
     handleRotationInputChange,
     handleResetPart,
+    handleResetGroup,
   } = usePartEditor({ currentModelId, onPartsChange: setParts });
 
-  // Keyboard shortcuts: G = translate, R = rotate, Escape = deselect
+  // Keyboard shortcuts
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "g" || e.key === "G") setEditMode("translate");
       if (e.key === "r" || e.key === "R") setEditMode("rotate");
-      if (e.key === "Escape") setSelectedLabel(null);
+      if (e.key === "p" || e.key === "P") setSelectionMode((m) => m === "group" ? "part" : "group");
+      if (e.key === "Escape") clearSelection();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setEditMode, setSelectedLabel]);
+  }, [setEditMode, setSelectionMode, clearSelection]);
+
+  // Unified select handler — all clicks in the canvas come through here
+  function handleCanvasSelect(label: string | null, altKey: boolean) {
+    if (!label) {
+      clearSelection();
+      return;
+    }
+    if (altKey || selectionMode === "part") {
+      // Individual part mode
+      setSelectedLabel(label);
+      setSelectedGroup(null);
+    } else {
+      // Group mode
+      setSelectedGroup(getGroupPrefix(label));
+      setSelectedLabel(null);
+    }
+  }
 
   async function handleRender(file: File) {
     setStatus("loading");
-    setSelectedLabel(null);
+    clearSelection();
     setCurrentModelId(null);
     try {
       const result = await renderImage(file);
@@ -106,7 +132,19 @@ export default function App() {
 
   const canSave = parts.length > 0 && status === "success";
   const canvasMode = instances.length > 0 ? "composed" : "single";
-  const selectedPart = selectedLabel ? parts.find((p) => p.label === selectedLabel) ?? null : null;
+  const hasSelection = selectedLabel !== null || selectedGroup !== null;
+
+  // Derive what to show in the properties panel
+  const selectedPart = selectedLabel
+    ? parts.find((p) => p.label === selectedLabel) ?? null
+    : null;
+  const grouped = groupPartsByPrefix(parts);
+  const selectedGroupParts = selectedGroup ? (grouped[selectedGroup] ?? []) : [];
+
+  // For Reset Group, find base parts in that group
+  function getBaseGroupParts(groupName: string): ScenePart[] {
+    return baseParts.filter((p) => getGroupPrefix(p.label) === groupName);
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
@@ -116,7 +154,9 @@ export default function App() {
         canSave={canSave}
         editMode={editMode}
         onEditModeChange={setEditMode}
-        hasSelection={selectedLabel !== null}
+        selectionMode={selectionMode}
+        onSelectionModeChange={setSelectionMode}
+        hasSelection={hasSelection}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -126,18 +166,37 @@ export default function App() {
           <StatusBar status={status} message={errorMsg} partCount={parts.length} />
         </div>
 
-        {/* Canvas + PartProperties */}
+        {/* Canvas + properties panel */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1">
             <SceneCanvas
               parts={canvasMode === "single" ? parts : []}
               instances={canvasMode === "composed" ? instances : []}
+              selectedGroup={selectedGroup}
               selectedLabel={selectedLabel}
               editMode={editMode}
-              onSelectPart={setSelectedLabel}
+              onSelect={handleCanvasSelect}
               onTransformEnd={handleTransformEnd}
+              onGroupTransformEnd={(groupName, groupParts, delta: Vec3) =>
+                handleGroupTransformEnd(groupName, groupParts, delta)
+              }
             />
           </div>
+
+          {/* Group properties panel */}
+          {selectedGroup && !selectedLabel && (
+            <GroupProperties
+              groupName={selectedGroup}
+              groupParts={selectedGroupParts}
+              modelId={currentModelId}
+              onResetGroup={(groupName, _parts) =>
+                handleResetGroup(groupName, getBaseGroupParts(groupName))
+              }
+              onClose={clearSelection}
+            />
+          )}
+
+          {/* Individual part properties panel */}
           {selectedPart && (
             <PartProperties
               part={selectedPart}
@@ -148,7 +207,7 @@ export default function App() {
               onResetPart={(label, _part) =>
                 handleResetPart(label, baseParts.find((p) => p.label === label) ?? _part)
               }
-              onClose={() => setSelectedLabel(null)}
+              onClose={clearSelection}
             />
           )}
         </div>

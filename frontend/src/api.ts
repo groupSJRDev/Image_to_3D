@@ -1,6 +1,6 @@
 import type {
-  ComposedScene, PartOverrideRequest, RenderResponse, ScenePart,
-  SceneSummary, StoredModel, Transform,
+  BatchOverrideItem, ComposedScene, PartOverrideRequest, RenderResponse,
+  ScenePart, SceneSummary, StoredModel, Transform,
 } from "./types";
 
 export class ApiError extends Error {
@@ -154,4 +154,15 @@ export function deletePartOverride(modelId: number, partLabel: string): Promise<
 
 export function deleteAllOverrides(modelId: number): Promise<void> {
   return requestVoid(`/api/models/${modelId}/overrides`, { method: "DELETE" });
+}
+
+export function batchUpsertOverrides(
+  modelId: number,
+  overrides: BatchOverrideItem[],
+): Promise<ScenePart[]> {
+  return request(`/api/models/${modelId}/overrides/batch`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ overrides }),
+  });
 }

@@ -7,19 +7,24 @@ import { resolveColor } from "./resolveColor";
 
 interface Props {
   part: ScenePartType;
-  isSelected?: boolean;
+  isSelected?: boolean;     // emissive highlight (group OR individual)
+  showGizmo?: boolean;      // show TransformControls (only for individual alt-click)
   editMode?: EditMode;
-  onSelect?: (label: string) => void;
+  onSelect?: (label: string, altKey: boolean) => void;
   onTransformEnd?: (label: string, pos: Vec3, rot: Vec3) => void;
 }
 
 export function ScenePart({
   part,
   isSelected = false,
+  showGizmo,
   editMode = "translate",
   onSelect,
   onTransformEnd,
 }: Props) {
+  // showGizmo defaults to isSelected when not explicitly set
+  const shouldShowGizmo = showGizmo ?? isSelected;
+
   const geometry = useMemo(() => {
     const geo = buildGeometry(part);
     if (geo) geo.computeVertexNormals();
@@ -38,14 +43,12 @@ export function ScenePart({
     };
   }, [geometry, wireframeGeo]);
 
-  // useState ref so TransformControls re-renders when mesh mounts
   const [meshObj, setMeshObj] = useState<THREE.Mesh | null>(null);
   const tcRef = useRef<any>(null);
 
-  // Listen for drag-end on TransformControls to persist the new transform
   useEffect(() => {
     const tc = tcRef.current;
-    if (!tc || !isSelected || !meshObj) return;
+    if (!tc || !shouldShowGizmo || !meshObj) return;
 
     const handleDraggingChanged = (e: { value: boolean }) => {
       if (!e.value && meshObj && onTransformEnd) {
@@ -59,7 +62,7 @@ export function ScenePart({
 
     tc.addEventListener("dragging-changed", handleDraggingChanged);
     return () => tc.removeEventListener("dragging-changed", handleDraggingChanged);
-  }, [tcRef.current, isSelected, meshObj, part.label, onTransformEnd]);
+  }, [tcRef.current, shouldShowGizmo, meshObj, part.label, onTransformEnd]);
 
   if (!geometry) return null;
 
@@ -80,7 +83,7 @@ export function ScenePart({
         geometry={geometry}
         onClick={(e) => {
           e.stopPropagation();
-          onSelect?.(part.label);
+          onSelect?.(part.label, e.altKey);
         }}
       >
         <meshStandardMaterial
@@ -104,7 +107,7 @@ export function ScenePart({
         )}
       </mesh>
 
-      {isSelected && meshObj && (
+      {shouldShowGizmo && meshObj && (
         <TransformControls
           ref={tcRef}
           object={meshObj}

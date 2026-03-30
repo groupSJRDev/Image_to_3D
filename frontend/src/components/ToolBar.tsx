@@ -1,4 +1,4 @@
-import type { EditMode, ScenePart } from "../types";
+import type { EditMode, ScenePart, SelectionMode } from "../types";
 
 interface Props {
   parts: ScenePart[];
@@ -6,6 +6,8 @@ interface Props {
   canSave: boolean;
   editMode: EditMode;
   onEditModeChange: (mode: EditMode) => void;
+  selectionMode: SelectionMode;
+  onSelectionModeChange: (mode: SelectionMode) => void;
   hasSelection: boolean;
 }
 
@@ -64,11 +66,50 @@ addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updat
   a.click();
 }
 
-export function ToolBar({ parts, onSave, canSave, editMode, onEditModeChange, hasSelection }: Props) {
+export function ToolBar({
+  parts,
+  onSave,
+  canSave,
+  editMode,
+  onEditModeChange,
+  selectionMode,
+  onSelectionModeChange,
+  hasSelection,
+}: Props) {
   const hasScene = parts.length > 0;
   return (
     <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 bg-gray-900 text-sm">
       <span className="font-semibold text-gray-200 mr-auto">Image → 3D Renderer</span>
+
+      {/* Selection mode toggle — always visible when parts are loaded */}
+      {hasScene && (
+        <div className="flex items-center gap-1 border border-gray-700 rounded overflow-hidden">
+          <button
+            onClick={() => onSelectionModeChange("group")}
+            title="Click selects whole group (default)"
+            className={`px-2 py-1 text-xs transition-colors ${
+              selectionMode === "group"
+                ? "bg-indigo-700 text-white"
+                : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+            }`}
+          >
+            Group
+          </button>
+          <button
+            onClick={() => onSelectionModeChange("part")}
+            title="Click selects individual part (P)"
+            className={`px-2 py-1 text-xs transition-colors ${
+              selectionMode === "part"
+                ? "bg-indigo-700 text-white"
+                : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+            }`}
+          >
+            Part
+          </button>
+        </div>
+      )}
+
+      {/* Edit mode toggle — only visible when something is selected */}
       {hasSelection && (
         <div className="flex items-center gap-1 border border-gray-700 rounded overflow-hidden">
           <button
@@ -95,6 +136,7 @@ export function ToolBar({ parts, onSave, canSave, editMode, onEditModeChange, ha
           </button>
         </div>
       )}
+
       <button
         disabled={!canSave}
         onClick={onSave}

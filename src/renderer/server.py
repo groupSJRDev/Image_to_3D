@@ -136,6 +136,21 @@ class PartOverrideRequest(BaseModel):
     opacity: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
+class BatchOverrideItem(BaseModel):
+    part_label: str = Field(max_length=255)
+    pos_x: float | None = Field(default=None, ge=-1000, le=1000)
+    pos_y: float | None = Field(default=None, ge=-1000, le=1000)
+    pos_z: float | None = Field(default=None, ge=-1000, le=1000)
+    rot_x: float | None = Field(default=None, ge=-6.284, le=6.284)
+    rot_y: float | None = Field(default=None, ge=-6.284, le=6.284)
+    rot_z: float | None = Field(default=None, ge=-6.284, le=6.284)
+    opacity: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class BatchOverrideRequest(BaseModel):
+    overrides: list[BatchOverrideItem] = Field(max_length=1000)
+
+
 # ---------------------------------------------------------------------------
 # System
 # ---------------------------------------------------------------------------
@@ -371,6 +386,41 @@ def delete_all_overrides(
     for ov in overrides:
         session.delete(ov)
     session.commit()
+
+
+@app.put("/api/models/{model_id}/overrides/batch")
+def batch_upsert_overrides(
+    model_id: int,
+    body: BatchOverrideRequest,
+    session: Session = Depends(get_session),
+) -> list[dict]:
+    stored = session.get(StoredModel, model_id)
+    if not stored:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    parts = _safe_load_parts(stored.parts_json)
+    known_labels = {p["label"] for p in parts if isinstance(p, dict) and "label" in p}
+
+    for item in body.overrides:
+        if item.part_label not in known_labels:
+            raise HTTPException(status_code=404, detail=f"Part label not found: {item.part_label}")
+
+    for item in body.overrides:
+        override = session.exec(
+            select(PartOverride).where(
+                PartOverride.model_id == model_id,
+                PartOverride.part_label == item.part_label,
+            )
+        ).first()
+        if override is None:
+            override = PartOverride(model_id=model_id, part_label=item.part_label)
+        for field, val in item.model_dump(exclude={"part_label"}, exclude_unset=True).items():
+            setattr(override, field, val)
+        session.add(override)
+
+    session.commit()
+    overrides = session.exec(select(PartOverride).where(PartOverride.model_id == model_id)).all()
+    return _merge_overrides(parts, overrides)
 
 
 # ---------------------------------------------------------------------------
