@@ -4,11 +4,10 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, File
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -18,7 +17,7 @@ from sqlmodel import Session, select
 
 from renderer.database import get_session, init_db
 from renderer.extractor import ExtractionError, extract_scene_json
-from renderer.models import Scene, SceneInstance, StoredModel
+from renderer.models import PartOverride, Scene, SceneInstance, StoredModel
 from renderer.prompt import load_prompt, validate_prompt_exists
 
 load_dotenv()
@@ -50,6 +49,7 @@ class JSONFormatter(logging.Formatter):
 # ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -87,6 +87,7 @@ app.add_middleware(
 # Pydantic request / response schemas
 # ---------------------------------------------------------------------------
 
+
 class SaveModelRequest(BaseModel):
     name: str = Field(max_length=255)
     parts: list = Field(max_length=1000)
@@ -114,20 +115,31 @@ class AddInstanceRequest(BaseModel):
 
 
 class UpdateInstanceRequest(BaseModel):
-    pos_x: Optional[float] = Field(default=None, ge=-1000, le=1000)
-    pos_y: Optional[float] = Field(default=None, ge=-1000, le=1000)
-    pos_z: Optional[float] = Field(default=None, ge=-1000, le=1000)
-    rot_x: Optional[float] = Field(default=None, ge=-6.284, le=6.284)
-    rot_y: Optional[float] = Field(default=None, ge=-6.284, le=6.284)
-    rot_z: Optional[float] = Field(default=None, ge=-6.284, le=6.284)
-    scale_x: Optional[float] = Field(default=None, ge=0.001, le=100)
-    scale_y: Optional[float] = Field(default=None, ge=0.001, le=100)
-    scale_z: Optional[float] = Field(default=None, ge=0.001, le=100)
+    pos_x: float | None = Field(default=None, ge=-1000, le=1000)
+    pos_y: float | None = Field(default=None, ge=-1000, le=1000)
+    pos_z: float | None = Field(default=None, ge=-1000, le=1000)
+    rot_x: float | None = Field(default=None, ge=-6.284, le=6.284)
+    rot_y: float | None = Field(default=None, ge=-6.284, le=6.284)
+    rot_z: float | None = Field(default=None, ge=-6.284, le=6.284)
+    scale_x: float | None = Field(default=None, ge=0.001, le=100)
+    scale_y: float | None = Field(default=None, ge=0.001, le=100)
+    scale_z: float | None = Field(default=None, ge=0.001, le=100)
+
+
+class PartOverrideRequest(BaseModel):
+    pos_x: float | None = Field(default=None, ge=-1000, le=1000)
+    pos_y: float | None = Field(default=None, ge=-1000, le=1000)
+    pos_z: float | None = Field(default=None, ge=-1000, le=1000)
+    rot_x: float | None = Field(default=None, ge=-6.284, le=6.284)
+    rot_y: float | None = Field(default=None, ge=-6.284, le=6.284)
+    rot_z: float | None = Field(default=None, ge=-6.284, le=6.284)
+    opacity: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 # ---------------------------------------------------------------------------
 # System
 # ---------------------------------------------------------------------------
+
 
 @app.get("/health")
 def health() -> dict:
@@ -137,6 +149,7 @@ def health() -> dict:
 # ---------------------------------------------------------------------------
 # Render
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/render")
 @limiter.limit(os.getenv("RATE_LIMIT", "10/minute"))
@@ -172,8 +185,8 @@ async def render(request: Request, image: UploadFile = File(...)) -> dict:
 
     # --- Gemini API call with specific exception handling (audit 1.3) ---
     try:
-        import google.generativeai as genai
         import google.api_core.exceptions
+        import google.generativeai as genai
 
         genai.configure(api_key=api_key)
         model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-pro-exp")
@@ -191,7 +204,7 @@ async def render(request: Request, image: UploadFile = File(...)) -> dict:
     except (ConnectionError, TimeoutError) as exc:
         logger.error("Network error calling Gemini: %s", exc, exc_info=True)
         raise HTTPException(status_code=503, detail="AI model service unavailable")
-    except Exception as exc:
+    except Exception:
         logger.exception("Unexpected error in render endpoint")
         raise HTTPException(status_code=500, detail="Internal server error")
 
@@ -217,6 +230,7 @@ def get_prompt() -> dict:
 # ---------------------------------------------------------------------------
 # Model library
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/models", status_code=201)
 def save_model(body: SaveModelRequest, session: Session = Depends(get_session)) -> dict:
@@ -252,12 +266,14 @@ def get_model(model_id: int, session: Session = Depends(get_session)) -> dict:
     if not stored:
         raise HTTPException(status_code=404, detail="Model not found")
     parts = _safe_load_parts(stored.parts_json)
+    overrides = session.exec(select(PartOverride).where(PartOverride.model_id == model_id)).all()
+    merged = _merge_overrides(parts, overrides)
     return {
         "id": stored.id,
         "name": stored.name,
-        "part_count": len(parts),
+        "part_count": len(merged),
         "created_at": stored.created_at.isoformat(),
-        "parts": parts,
+        "parts": merged,
     }
 
 
@@ -283,8 +299,84 @@ def delete_model(model_id: int, session: Session = Depends(get_session)) -> None
 
 
 # ---------------------------------------------------------------------------
+# Part overrides
+# ---------------------------------------------------------------------------
+
+
+@app.put("/api/models/{model_id}/parts/{part_label}/override")
+def upsert_part_override(
+    model_id: int,
+    part_label: str,
+    body: PartOverrideRequest,
+    session: Session = Depends(get_session),
+) -> dict:
+    stored = session.get(StoredModel, model_id)
+    if not stored:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    parts = _safe_load_parts(stored.parts_json)
+    known_labels = {p["label"] for p in parts if isinstance(p, dict) and "label" in p}
+    if part_label not in known_labels:
+        raise HTTPException(status_code=404, detail="Part label not found in model")
+
+    override = session.exec(
+        select(PartOverride).where(
+            PartOverride.model_id == model_id,
+            PartOverride.part_label == part_label,
+        )
+    ).first()
+
+    if override is None:
+        override = PartOverride(model_id=model_id, part_label=part_label)
+
+    for field, val in body.model_dump(exclude_unset=True).items():
+        setattr(override, field, val)
+
+    session.add(override)
+    session.commit()
+    session.refresh(override)
+
+    # Return the merged part
+    overrides = session.exec(select(PartOverride).where(PartOverride.model_id == model_id)).all()
+    merged = _merge_overrides(parts, overrides)
+    part_out = next((p for p in merged if p.get("label") == part_label), None)
+    if part_out is None:
+        raise HTTPException(status_code=404, detail="Part label not found after merge")
+    return part_out
+
+
+@app.delete("/api/models/{model_id}/parts/{part_label}/override", status_code=204)
+def delete_part_override(
+    model_id: int,
+    part_label: str,
+    session: Session = Depends(get_session),
+) -> None:
+    override = session.exec(
+        select(PartOverride).where(
+            PartOverride.model_id == model_id,
+            PartOverride.part_label == part_label,
+        )
+    ).first()
+    if override:
+        session.delete(override)
+        session.commit()
+
+
+@app.delete("/api/models/{model_id}/overrides", status_code=204)
+def delete_all_overrides(
+    model_id: int,
+    session: Session = Depends(get_session),
+) -> None:
+    overrides = session.exec(select(PartOverride).where(PartOverride.model_id == model_id)).all()
+    for ov in overrides:
+        session.delete(ov)
+    session.commit()
+
+
+# ---------------------------------------------------------------------------
 # Scene composer
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/scenes", status_code=201)
 def create_scene(body: CreateSceneRequest, session: Session = Depends(get_session)) -> dict:
@@ -306,9 +398,7 @@ def get_scene(scene_id: int, session: Session = Depends(get_session)) -> dict:
     scene = session.get(Scene, scene_id)
     if not scene:
         raise HTTPException(status_code=404, detail="Scene not found")
-    instances = session.exec(
-        select(SceneInstance).where(SceneInstance.scene_id == scene_id)
-    ).all()
+    instances = session.exec(select(SceneInstance).where(SceneInstance.scene_id == scene_id)).all()
     # Bulk-load referenced models to avoid N+1 queries
     model_ids = {inst.model_id for inst in instances}
     if model_ids:
@@ -380,6 +470,41 @@ def remove_instance(scene_id: int, instance_id: int, session: Session = Depends(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
+def _merge_overrides(parts: list, overrides: list) -> list:
+    ov_map = {ov.part_label: ov for ov in overrides}
+    result = []
+    for part in parts:
+        if not isinstance(part, dict):
+            result.append(part)
+            continue
+        p = dict(part)
+        label = p.get("label", "")
+        ov = ov_map.get(label)
+        if ov:
+            pos = dict(p.get("position", {}))
+            rot = dict(p.get("rotation", {}))
+            if ov.pos_x is not None:
+                pos["x"] = ov.pos_x
+            if ov.pos_y is not None:
+                pos["y"] = ov.pos_y
+            if ov.pos_z is not None:
+                pos["z"] = ov.pos_z
+            if ov.rot_x is not None:
+                rot["x"] = ov.rot_x
+            if ov.rot_y is not None:
+                rot["y"] = ov.rot_y
+            if ov.rot_z is not None:
+                rot["z"] = ov.rot_z
+            p["position"] = pos
+            p["rotation"] = rot
+            p["opacity"] = ov.opacity if ov.opacity is not None else 1.0
+        else:
+            p["opacity"] = 1.0
+        result.append(p)
+    return result
+
+
 def _safe_load_parts(parts_json: str) -> list:
     try:
         data = json.loads(parts_json)
@@ -389,7 +514,7 @@ def _safe_load_parts(parts_json: str) -> list:
         return []
 
 
-def _serialise_instance(inst: SceneInstance, stored: Optional[StoredModel]) -> dict:
+def _serialise_instance(inst: SceneInstance, stored: StoredModel | None) -> dict:
     return {
         "id": inst.id,
         "model_id": inst.model_id,
@@ -404,6 +529,7 @@ def _serialise_instance(inst: SceneInstance, stored: Optional[StoredModel]) -> d
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def start():
     uvicorn.run(

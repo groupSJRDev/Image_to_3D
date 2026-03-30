@@ -23,6 +23,7 @@ export interface ScenePart {
   color: string;
   position: Vec3;
   rotation: Vec3;
+  opacity?: number;   // 0.0–1.0, default 1.0; merged from PartOverride on backend
   scale?: Vec3;
   // box
   width?: number;
@@ -104,3 +105,15 @@ export interface SceneSummary {
   name: string;
   created_at: string;
 }
+
+export interface PartOverrideRequest {
+  pos_x?: number | null;
+  pos_y?: number | null;
+  pos_z?: number | null;
+  rot_x?: number | null;
+  rot_y?: number | null;
+  rot_z?: number | null;
+  opacity?: number | null;
+}
+
+export type EditMode = "translate" | "rotate";

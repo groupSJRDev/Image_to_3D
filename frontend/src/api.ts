@@ -1,6 +1,6 @@
 import type {
-  ComposedScene, RenderResponse, SceneSummary,
-  StoredModel, Transform,
+  ComposedScene, PartOverrideRequest, RenderResponse, ScenePart,
+  SceneSummary, StoredModel, Transform,
 } from "./types";
 
 export class ApiError extends Error {
@@ -129,4 +129,29 @@ export function updateInstance(
 
 export function removeInstance(sceneId: number, instanceId: number): Promise<void> {
   return requestVoid(`/api/scenes/${sceneId}/instances/${instanceId}`, { method: "DELETE" });
+}
+
+// ── Part overrides ────────────────────────────────────────────────────────────
+
+export function upsertPartOverride(
+  modelId: number,
+  partLabel: string,
+  body: PartOverrideRequest,
+): Promise<ScenePart> {
+  return request(`/api/models/${modelId}/parts/${encodeURIComponent(partLabel)}/override`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function deletePartOverride(modelId: number, partLabel: string): Promise<void> {
+  return requestVoid(
+    `/api/models/${modelId}/parts/${encodeURIComponent(partLabel)}/override`,
+    { method: "DELETE" },
+  );
+}
+
+export function deleteAllOverrides(modelId: number): Promise<void> {
+  return requestVoid(`/api/models/${modelId}/overrides`, { method: "DELETE" });
 }

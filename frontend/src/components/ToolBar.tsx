@@ -1,9 +1,12 @@
-import type { ScenePart } from "../types";
+import type { EditMode, ScenePart } from "../types";
 
 interface Props {
   parts: ScenePart[];
   onSave: () => void;
   canSave: boolean;
+  editMode: EditMode;
+  onEditModeChange: (mode: EditMode) => void;
+  hasSelection: boolean;
 }
 
 function downloadJSON(parts: ScenePart[]) {
@@ -61,11 +64,37 @@ addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updat
   a.click();
 }
 
-export function ToolBar({ parts, onSave, canSave }: Props) {
+export function ToolBar({ parts, onSave, canSave, editMode, onEditModeChange, hasSelection }: Props) {
   const hasScene = parts.length > 0;
   return (
     <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 bg-gray-900 text-sm">
       <span className="font-semibold text-gray-200 mr-auto">Image → 3D Renderer</span>
+      {hasSelection && (
+        <div className="flex items-center gap-1 border border-gray-700 rounded overflow-hidden">
+          <button
+            onClick={() => onEditModeChange("translate")}
+            title="Move (G)"
+            className={`px-2 py-1 text-xs transition-colors ${
+              editMode === "translate"
+                ? "bg-blue-700 text-white"
+                : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+            }`}
+          >
+            Move
+          </button>
+          <button
+            onClick={() => onEditModeChange("rotate")}
+            title="Rotate (R)"
+            className={`px-2 py-1 text-xs transition-colors ${
+              editMode === "rotate"
+                ? "bg-blue-700 text-white"
+                : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+            }`}
+          >
+            Rotate
+          </button>
+        </div>
+      )}
       <button
         disabled={!canSave}
         onClick={onSave}

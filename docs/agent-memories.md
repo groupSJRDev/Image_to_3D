@@ -708,3 +708,268 @@ When saving a memory, append a new entry using this exact format:
 - **Significance:**
   JSON-blob-to-relational joins are a common pattern in LLM-powered systems where the AI output is stored as a blob but downstream features need to reference individual elements. Always validate the join key on write — don't trust the client to send valid references into opaque data.
 - **Related Entries:** Sparse Nullable Overrides, Input Validation at System Boundaries
+
+---
+
+## [2026-03-30 21:00] — Implementation: Per-Part Editing Feature Complete
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Summation
+- **Tags:** #database #architecture #r3f #threejs #react #fastapi #pipeline
+- **Memory:**
+  Implemented the full per-part editing feature as specified in `docs/feature-part-editing.md`. All 13 acceptance criteria are addressed. Summary of what was built:
+
+  **Backend (`src/renderer/`):**
+  - `models.py`: `PartOverride` table — `(model_id, part_label)` unique constraint via `__table_args__`, all transform/opacity fields `Optional[float]`, cascade delete from `storedmodel.id`.
+  - `server.py`: `_merge_overrides(parts, overrides)` helper applies non-null override fields onto base parts list, adds `opacity: 1.0` default to all parts. Three new endpoints: `PUT /api/models/{id}/parts/{label}/override` (upsert), `DELETE /api/models/{id}/parts/{label}/override` (single reset), `DELETE /api/models/{id}/overrides` (bulk reset). `GET /api/models/{id}` now calls `_merge_overrides` before returning.
+  - Override upsert uses `body.model_dump(exclude_unset=True)` so only explicitly-provided fields are written — fields absent from the request body are not cleared on existing rows.
+
+  **Frontend (`frontend/src/`):**
+  - `types.ts`: `opacity?` on `ScenePart`; new `PartOverrideRequest` interface; `EditMode` type alias.
+  - `api.ts`: `upsertPartOverride`, `deletePartOverride`, `deleteAllOverrides`.
+  - `hooks/usePartEditor.ts`: selection state, `editMode`, all change handlers (transform end, opacity debounced 300ms, position/rotation number inputs), reset single/all.
+  - `components/PartProperties.tsx`: properties panel (position XYZ, rotation XYZ in degrees, opacity slider, Reset button). Shown below canvas when a part is selected. Rotation displayed in degrees, stored/sent in radians.
+  - `three/ScenePart.tsx`: click-to-select with `e.stopPropagation()`, emissive orange highlight when selected (`emissive="#ff8800" emissiveIntensity={0.3}`), material `transparent`/`opacity`/`depthWrite` handling, `TransformControls` rendered inside ScenePart (not SceneCanvas) using `useState` ref pattern so the mesh is available when TransformControls mounts.
+  - `three/SceneCanvas.tsx`: `onPointerMissed` for canvas-background deselect; `selectedLabel`, `editMode`, `onSelectPart`, `onTransformEnd` props threaded through.
+  - `components/ToolBar.tsx`: Move/Rotate toggle (only rendered when `hasSelection` is true).
+  - `App.tsx`: `currentModelId` (set after save), `baseParts` (frozen copy of post-render parts for Reset), keyboard shortcuts G/R/Escape, `PartProperties` rendered below canvas in a flex column layout.
+
+- **Significance:**
+  The `StoredModel.parts_json` was never mutated — all edits live exclusively in `PartOverride` rows. The design correctly separates LLM-generated geometry (immutable) from user-applied transforms (mutable and reversible).
+- **Related Entries:** Sparse Nullable Overrides, Design Pattern: Sparse Nullable Overrides for Layered Mutability, Validate Override Keys Against Source Data, R3F: TransformControls and OrbitControls Coexistence
+
+---
+
+## [2026-03-30 21:01] — R3F: TransformControls Placement and the useState Ref Pattern
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Insight
+- **Tags:** #r3f #threejs #react #3d
+- **Memory:**
+  `TransformControls` from `@react-three/drei` requires an `object` prop (a live `THREE.Object3D`). If you render it in the *parent* (SceneCanvas), you need to pass mesh refs up — complex with many parts. The simpler pattern is to render `TransformControls` *inside* the component that owns the mesh (ScenePart).
+
+  The critical subtlety: you cannot use a `useRef` for the mesh and immediately pass `ref.current` to `TransformControls` — `ref.current` is `null` on the first render and `TransformControls` won't re-render when it becomes non-null. The fix is `useState`:
+
+  ```tsx
+  const [meshObj, setMeshObj] = useState<THREE.Mesh | null>(null);
+
+  <mesh ref={setMeshObj} ...>...</mesh>
+  {isSelected && meshObj && (
+    <TransformControls object={meshObj} ... />
+  )}
+  ```
+
+  `setMeshObj` is called by React when the mesh mounts, triggering a re-render that now has `meshObj !== null`, which lets `TransformControls` mount correctly.
+
+- **Significance:**
+  This useState-as-ref pattern is the standard R3F solution for any component that needs to conditionally render something that depends on a mounted Three.js object. Using `useRef` instead silently produces a `TransformControls` that never attaches.
+- **Related Entries:** R3F: TransformControls and OrbitControls Coexistence, Three.js Rendering Patterns
+
+---
+
+## [2026-03-30 21:02] — R3F: Reading Transform After Drag via `dragging-changed` Event
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Reference
+- **Tags:** #r3f #threejs #react #3d
+- **Memory:**
+  `TransformControls` (drei) does not have an `onMouseUp` prop. To detect drag-end and read the final position/rotation, listen to the `dragging-changed` event on the `TransformControls` instance via a `ref`:
+
+  ```tsx
+  const tcRef = useRef<any>(null);
+
+  useEffect(() => {
+    const tc = tcRef.current;
+    if (!tc || !isSelected || !meshObj) return;
+    const handler = (e: { value: boolean }) => {
+      if (!e.value) {  // value=false means drag just ended
+        onTransformEnd(label, {
+          x: meshObj.position.x, y: meshObj.position.y, z: meshObj.position.z,
+        }, {
+          x: meshObj.rotation.x, y: meshObj.rotation.y, z: meshObj.rotation.z,
+        });
+      }
+    };
+    tc.addEventListener("dragging-changed", handler);
+    return () => tc.removeEventListener("dragging-changed", handler);
+  }, [tcRef.current, isSelected, meshObj, ...]);
+
+  <TransformControls ref={tcRef} object={meshObj} mode={editMode} />
+  ```
+
+  The event fires twice per drag: `{value: true}` at start and `{value: false}` at end. Only the `false` case triggers a save.
+
+  After drag-end, read position/rotation directly from the `THREE.Mesh` object — `TransformControls` has already mutated it imperatively. Do NOT read from React state (it still holds the pre-drag values).
+
+- **Significance:**
+  This is the canonical pattern for "save on drag release" with R3F TransformControls. Alternatives (`onObjectChange` fires on every frame, polling is wasteful) are inferior.
+- **Related Entries:** R3F: TransformControls Placement and the useState Ref Pattern, Three.js Rendering Patterns
+
+---
+
+## [2026-03-30 21:03] — React/R3F: Optimistic State Update Prevents Position Snap-Back
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Insight
+- **Tags:** #react #r3f #threejs #general-principle
+- **Memory:**
+  `TransformControls` mutates the Three.js mesh imperatively. After drag-end, when the API call is made and React state is updated, R3F re-renders the mesh with `position={[pos.x, pos.y, pos.z]}` from state. If state still holds the *old* position at that moment, the mesh visually snaps back to its original location until the API responds.
+
+  The fix is an **optimistic local state update** that happens synchronously in the `dragging-changed` handler, *before* the async API call:
+
+  ```typescript
+  // In handleTransformEnd:
+  onPartsChange((prev) =>
+    prev.map((p) => p.label === label ? { ...p, position: pos, rotation: rot } : p)
+  );
+  saveOverride(label, { pos_x: pos.x, ... });  // async, fires after state is updated
+  ```
+
+  Since `setParts` is synchronous and React batches the update into the same render cycle as the API call initiation, the mesh position in state matches what Three.js already shows — no snap-back.
+
+  General principle: **whenever an imperative 3D operation (drag, physics, animation) concludes and you need to persist the result via an async API, update React state first with the imperatively-obtained values, then fire the API call.**
+- **Significance:**
+  Applies to any R3F scenario where Three.js objects are mutated outside React's control (physics engines, animation mixers, drag interactions). The optimistic update is not about optimism in the usual sense — it's about keeping React state in sync with the already-visible Three.js state.
+- **Related Entries:** R3F: TransformControls Placement and the useState Ref Pattern, R3F: Reading Transform After Drag
+
+---
+
+## [2026-03-30 21:04] — API Design: `exclude_unset=True` for Sparse Patch Endpoints
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Insight
+- **Tags:** #fastapi #python #api #general-principle
+- **Memory:**
+  When a Pydantic model has all-optional fields (e.g., `PartOverrideRequest`), all unset fields default to `None`. On an update/upsert, you cannot tell the difference between "client didn't send this field" and "client explicitly sent null to clear it" using a naive `body.model_dump()`.
+
+  The solution is `body.model_dump(exclude_unset=True)`, which only includes keys that were explicitly present in the request body:
+
+  ```python
+  for field, val in body.model_dump(exclude_unset=True).items():
+      setattr(override, field, val)
+  ```
+
+  This means:
+  - Field absent from body → not written (existing DB value preserved)
+  - Field present as `null` → written as `None` (explicit clear/reset)
+  - Field present as a float → written as that float
+
+  This gives the client full control: partial updates don't wipe unchanged fields, and explicit nulls can reset individual overrides without deleting the whole row.
+
+- **Significance:**
+  The standard pattern for any sparse-update endpoint in FastAPI. Without `exclude_unset=True`, all-Optional Pydantic models are dangerous — every PATCH or upsert silently clears fields the client didn't intend to touch. This is a non-obvious footgun; `model_dump()` vs `model_dump(exclude_unset=True)` looks identical until a client sends a partial body.
+- **Related Entries:** Sparse Nullable Overrides, Input Validation at System Boundaries
+
+---
+
+## [2026-03-30 21:05] — Three.js: Transparency Requires `depthWrite=false` and `transparent=true`
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Reference
+- **Tags:** #threejs #r3f #3d
+- **Memory:**
+  When a mesh material has `opacity < 1`, setting `transparent={true}` alone is not enough to avoid z-fighting artifacts when multiple transparent objects overlap. The correct combination:
+
+  ```tsx
+  <meshStandardMaterial
+    transparent={opacity < 1}
+    opacity={opacity}
+    depthWrite={!transparent}   // false when transparent, true when opaque
+  />
+  ```
+
+  `depthWrite={false}` prevents transparent objects from writing to the depth buffer, which causes incorrect occlusion of objects behind them. R3F's `<Canvas>` sorts transparent objects back-to-front automatically when `depthWrite` is off.
+
+  For the wireframe overlay on a transparent mesh, the wireframe opacity should also scale down:
+  ```tsx
+  <lineBasicMaterial transparent opacity={Math.min(0.13, partOpacity * 0.13)} />
+  ```
+  Otherwise the wireframe remains fully opaque on a ghost-transparent mesh, which looks wrong.
+
+- **Significance:**
+  The `transparent` + `depthWrite` combination is required for correct transparency in Three.js. `transparent=true` with `depthWrite=true` (the default) produces z-sorting artifacts on complex scenes with multiple transparent parts.
+- **Related Entries:** Three.js Rendering Patterns, Frontend Stack Decision
+
+---
+
+## [2026-03-30 21:06] — UX: baseParts Snapshot Required for Non-Destructive Reset
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Insight
+- **Tags:** #react #architecture #general-principle
+- **Memory:**
+  The "Reset to Original" button needs to restore a part to its LLM-generated values. But `parts` state mutates as the user edits. If Reset reads from `parts`, it gets the already-edited values — a no-op.
+
+  The fix: store a frozen `baseParts` snapshot at the moment the render response arrives (or when a saved model is loaded), and never mutate it:
+
+  ```typescript
+  const [parts, setParts] = useState<ScenePart[]>([]);      // mutable display state
+  const [baseParts, setBaseParts] = useState<ScenePart[]>([]); // immutable snapshot
+
+  // On render:
+  setParts(result.parts);
+  setBaseParts(result.parts);  // snapshot frozen here
+
+  // On Reset:
+  handleResetPart(label, baseParts.find(p => p.label === label) ?? currentPart)
+  ```
+
+  This is the same immutability principle as `StoredModel.parts_json` on the backend, applied to the frontend: the source-of-truth baseline is never overwritten, only the display layer changes.
+
+  General principle: **whenever a system allows non-destructive edits on top of a generated baseline, keep an explicit snapshot of that baseline at all layers (DB row, React state, etc.). Don't rely on being able to reconstruct it from the current mutable state.**
+- **Significance:**
+  Without `baseParts`, calling `handleResetPart` would either do nothing (resetting to the already-edited values) or require an extra API call to re-fetch the original from the DB. The snapshot makes reset instant and correct.
+- **Related Entries:** StoredModel Immutability, Sparse Nullable Overrides, Design Pattern: Sparse Nullable Overrides
+
+---
+
+## [2026-03-30 21:07] — SQLModel: UniqueConstraint via `__table_args__`
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Reference
+- **Tags:** #database #sqlmodel #python
+- **Memory:**
+  SQLModel does not have a direct `Field()` argument for composite unique constraints spanning multiple columns. The correct pattern uses `__table_args__` with a SQLAlchemy `UniqueConstraint`:
+
+  ```python
+  class PartOverride(SQLModel, table=True):
+      __table_args__ = (
+          sa.UniqueConstraint("model_id", "part_label", name="uq_partoverride_model_part"),
+      )
+      ...
+  ```
+
+  Note: `__table_args__` must be a **tuple** (even for a single constraint). A single dict or a non-tuple value raises a SQLAlchemy error at table creation.
+
+  This is the same mechanism as raw SQLAlchemy declarative base — SQLModel inherits it unchanged.
+
+- **Significance:**
+  The only way to add multi-column constraints or indexes in SQLModel. Single-column unique constraints can use `Field(sa_column=sa.Column(..., unique=True))`, but composite ones require `__table_args__`. Not documented prominently in SQLModel's own docs — refer to SQLAlchemy docs.
+- **Related Entries:** Database Design, SQLModel: sa_column_kwargs ondelete Goes on ForeignKey
+
+---
+
+## [2026-03-30 21:08] — SQLite: New Table Requires DB Recreation (No Auto-Migration)
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Correction
+- **Tags:** #database #sqlite #docker #debugging
+- **Memory:**
+  `SQLModel.metadata.create_all(engine)` only creates tables that do not yet exist. It does **not** add new tables to an existing SQLite database file automatically if that file already has other tables from a prior run.
+
+  After adding `PartOverride` to `models.py`, the existing `renderer.db` will not gain the new table until the DB is recreated:
+
+  ```bash
+  rm renderer.db
+  touch renderer.db     # must pre-exist as a file for Docker bind-mount
+  docker compose up
+  ```
+
+  If running outside Docker: delete the file and restart the server — `init_db()` calls `create_all` on startup.
+
+  This is the same Docker bind-mount gotcha documented in entry [2026-03-30 18:02]: if `renderer.db` doesn't exist as a file before Docker starts, Docker creates a directory and SQLite fails.
+
+- **Significance:**
+  Any schema change that adds tables requires this reset in development. The project does not use Alembic. For production (if this ever goes there), a proper migration tool would be needed. Until then, document that saved models are lost on schema changes and use "Download JSON" to export before resetting.
+- **Related Entries:** Docker: Volume-Mounted SQLite File Must Pre-Exist as a File, Database Design
+
