@@ -362,3 +362,70 @@ When saving a memory, append a new entry using this exact format:
 - **Significance:**
   Phased delivery only works cleanly when phases are nested, not sequential. Designing backward from the final schema to the MVP is counterintuitive but prevents the expensive rewrite that happens when Stage 2 invalidates Stage 1's assumptions.
 - **Related Entries:** Architecture Vision, Database Design
+
+---
+
+## [2026-03-30 11:00] — Implemented Project Structure (as built)
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Reference
+- **Tags:** #architecture #python #react #docker #filesystem
+- **Memory:**
+  The full implemented file tree after the initial build:
+
+  ```
+  /
+  ├── Dockerfile                        # backend container
+  ├── docker-compose.yml                # ports 8010 (backend) / 3010 (frontend)
+  ├── pyproject.toml                    # Python deps + scripts entry point
+  ├── .env.example
+  │
+  ├── src/renderer/
+  │   ├── __init__.py
+  │   ├── server.py       # FastAPI app — all routes, lifespan, CORS
+  │   ├── prompt.py       # loads decode_prompt.txt via Path(__file__), appends suffix
+  │   ├── extractor.py    # ExtractionError, extract_scene_json()
+  │   ├── database.py     # SQLModel engine, init_db(), get_session()
+  │   └── models.py       # StoredModel, Scene, SceneInstance ORM tables
+  │
+  ├── examples/
+  │   ├── decode_prompt.txt   # read-only — loaded by prompt.py at runtime
+  │   ├── example1.html
+  │   └── example2.html
+  │
+  └── frontend/
+      ├── Dockerfile              # node:20-slim, runs Vite dev server
+      ├── vite.config.ts          # port 3010, proxy /api → VITE_API_URL
+      ├── src/
+      │   ├── main.tsx
+      │   ├── App.tsx             # top-level state, layout, render/save/compose flow
+      │   ├── types.ts            # ScenePart, StoredModel, SceneInstance, etc.
+      │   ├── api.ts              # all fetch wrappers for /api/*
+      │   ├── index.css           # Tailwind import + full-height reset
+      │   ├── hooks/
+      │   │   └── useModels.ts    # fetches + caches model library
+      │   ├── components/
+      │   │   ├── UploadPanel.tsx     # drag-drop image input + Render button
+      │   │   ├── StatusBar.tsx       # idle/loading/success/error indicator
+      │   │   ├── ToolBar.tsx         # Save / Download JSON / Download HTML
+      │   │   ├── DebugPanel.tsx      # collapsible: Scene JSON | Raw LLM tabs
+      │   │   └── ModelLibrary.tsx    # stored models list with add/rename/delete
+      │   └── three/
+      │       ├── SceneCanvas.tsx     # R3F Canvas, two modes: parts[] or instances[]
+      │       ├── ScenePart.tsx       # mesh + wireframe for one geometry part
+      │       ├── ModelGroup.tsx      # group-level transform wrapping ScenePart children
+      │       ├── Lighting.tsx        # ambient + 4 directional lights
+      │       ├── GroundGrid.tsx      # minor/major grid + red/blue axes + floor plane
+      │       ├── geometryFactory.ts  # ScenePart → THREE.BufferGeometry (8 types)
+      │       └── resolveColor.ts     # label-pattern → material color override
+  ```
+
+  Key implementation notes:
+  - `server.py` wires `init_db()` via FastAPI `lifespan` context (not `@app.on_event`)
+  - `prompt.py` path: `Path(__file__).parent.parent.parent / "examples" / "decode_prompt.txt"`
+  - `database.py` adds `check_same_thread: False` only for SQLite connections
+  - `App.tsx` canvas switches mode based on `instances.length > 0`
+  - `addModelToScene` in `App.tsx` auto-creates a scene on first use if none exists
+- **Significance:**
+  Any agent resuming work should read this entry first to understand exactly where every file lives and what it does. Do not re-scaffold — build on this structure.
+- **Related Entries:** Infrastructure, Architecture Vision

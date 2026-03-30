@@ -19,9 +19,6 @@ build/
 venv/
 env/
 
-# Poetry
-poetry.lock
-
 # IDE
 .vscode/
 .idea/
@@ -29,3 +26,6 @@ poetry.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code local config
+.claude/settings.local.json
