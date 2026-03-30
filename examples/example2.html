@@ -1,0 +1,162 @@
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waving Man - Detailed Solid</title>
+  <link rel="icon" href="data:,">
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #ffffff;
+    }
+    canvas { display: block; }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    const modelDef = {"parts":[{"label":"torso-chest","geometryType":"box","width":0.40,"height":0.30,"depth":0.22,"position":{"x":0,"y":0.40,"z":0},"rotation":{"x":0,"y":0,"z":0},"color":"#4f86c6"},{"label":"torso-waist","geometryType":"box","width":0.36,"height":0.30,"depth":0.20,"position":{"x":0,"y":0.10,"z":0},"rotation":{"x":0,"y":0,"z":0},"color":"#4f86c6"},{"label":"shirt-placket","geometryType":"box","width":0.035,"height":0.58,"depth":0.005,"position":{"x":0,"y":0.26,"z":0.11},"rotation":{"x":0,"y":0,"z":0},"color":"#5a92d4"},{"label":"shirt-button-1","geometryType":"cylinder","radiusTop":0.005,"radiusBottom":0.005,"height":0.006,"position":{"x":0,"y":0.45,"z":0.112},"rotation":{"x":1.57,"y":0,"z":0},"color":"#ffffff"},{"label":"shirt-button-2","geometryType":"cylinder","radiusTop":0.005,"radiusBottom":0.005,"height":0.006,"position":{"x":0,"y":0.35,"z":0.112},"rotation":{"x":1.57,"y":0,"z":0},"color":"#ffffff"},{"label":"shirt-button-3","geometryType":"cylinder","radiusTop":0.005,"radiusBottom":0.005,"height":0.006,"position":{"x":0,"y":0.25,"z":0.112},"rotation":{"x":1.57,"y":0,"z":0},"color":"#ffffff"},{"label":"shirt-button-4","geometryType":"cylinder","radiusTop":0.005,"radiusBottom":0.005,"height":0.006,"position":{"x":0,"y":0.15,"z":0.112},"rotation":{"x":1.57,"y":0,"z":0},"color":"#ffffff"},{"label":"shirt-collar-right","geometryType":"box","width":0.12,"height":0.04,"depth":0.01,"position":{"x":-0.06,"y":0.52,"z":0.09},"rotation":{"x":0.2,"y":0.4,"z":-0.4},"color":"#4f86c6"},{"label":"shirt-collar-left","geometryType":"box","width":0.12,"height":0.04,"depth":0.01,"position":{"x":0.06,"y":0.52,"z":0.09},"rotation":{"x":0.2,"y":-0.4,"z":0.4},"color":"#4f86c6"},{"label":"neck","geometryType":"cylinder","radiusTop":0.055,"radiusBottom":0.06,"height":0.08,"position":{"x":0,"y":0.58,"z":0.02},"rotation":{"x":0.1,"y":0,"z":0},"color":"#f2c89a"},{"label":"head-cranium","geometryType":"sphere","radius":0.10,"position":{"x":0,"y":0.76,"z":0.04},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":0.9,"y":1.2,"z":1.0},"color":"#f2c89a"},{"label":"head-jaw","geometryType":"sphere","radius":0.08,"position":{"x":0,"y":0.68,"z":0.07},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":0.9,"y":0.9,"z":1.0},"color":"#f2c89a"},{"label":"ear-right","geometryType":"box","width":0.015,"height":0.04,"depth":0.03,"position":{"x":-0.095,"y":0.75,"z":0.03},"rotation":{"x":0.1,"y":0.2,"z":0.1},"color":"#e3b687"},{"label":"ear-left","geometryType":"box","width":0.015,"height":0.04,"depth":0.03,"position":{"x":0.095,"y":0.75,"z":0.03},"rotation":{"x":0.1,"y":-0.2,"z":-0.1},"color":"#e3b687"},{"label":"hair-main","geometryType":"sphere","radius":0.11,"position":{"x":0,"y":0.86,"z":0.03},"rotation":{"x":-0.2,"y":0,"z":0},"scale":{"x":0.95,"y":0.5,"z":1.1},"color":"#2a201b"},{"label":"hair-side-right","geometryType":"sphere","radius":0.04,"position":{"x":-0.09,"y":0.80,"z":0.0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":0.8,"y":1.5,"z":1.2},"color":"#2a201b"},{"label":"hair-side-left","geometryType":"sphere","radius":0.04,"position":{"x":0.09,"y":0.80,"z":0.0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":0.8,"y":1.5,"z":1.2},"color":"#2a201b"},{"label":"eyebrow-right","geometryType":"box","width":0.03,"height":0.005,"depth":0.005,"position":{"x":-0.04,"y":0.81,"z":0.135},"rotation":{"x":0,"y":0,"z":0.1},"color":"#2a201b"},{"label":"eyebrow-left","geometryType":"box","width":0.03,"height":0.005,"depth":0.005,"position":{"x":0.04,"y":0.81,"z":0.135},"rotation":{"x":0,"y":0,"z":-0.1},"color":"#2a201b"},{"label":"eye-sclera-right","geometryType":"sphere","radius":0.012,"position":{"x":-0.04,"y":0.78,"z":0.135},"rotation":{"x":0,"y":0,"z":0},"color":"#ffffff"},{"label":"eye-iris-right","geometryType":"sphere","radius":0.006,"position":{"x":-0.04,"y":0.78,"z":0.144},"rotation":{"x":0,"y":0,"z":0},"color":"#3b2c20"},{"label":"eye-sclera-left","geometryType":"sphere","radius":0.012,"position":{"x":0.04,"y":0.78,"z":0.135},"rotation":{"x":0,"y":0,"z":0},"color":"#ffffff"},{"label":"eye-iris-left","geometryType":"sphere","radius":0.006,"position":{"x":0.04,"y":0.78,"z":0.144},"rotation":{"x":0,"y":0,"z":0},"color":"#3b2c20"},{"label":"nose-bridge","geometryType":"box","width":0.015,"height":0.04,"depth":0.02,"position":{"x":0,"y":0.74,"z":0.145},"rotation":{"x":0.2,"y":0,"z":0},"color":"#f2c89a"},{"label":"nose-tip","geometryType":"sphere","radius":0.015,"position":{"x":0,"y":0.71,"z":0.155},"rotation":{"x":0,"y":0,"z":0},"color":"#e8b989"},{"label":"mouth-teeth","geometryType":"box","width":0.05,"height":0.012,"depth":0.01,"position":{"x":0,"y":0.665,"z":0.145},"rotation":{"x":0,"y":0,"z":0},"color":"#ffffff"},{"label":"mouth-lip-top","geometryType":"box","width":0.055,"height":0.005,"depth":0.01,"position":{"x":0,"y":0.675,"z":0.148},"rotation":{"x":0,"y":0,"z":0},"color":"#c8867a"},{"label":"mouth-lip-bottom","geometryType":"box","width":0.055,"height":0.007,"depth":0.01,"position":{"x":0,"y":0.655,"z":0.148},"rotation":{"x":0,"y":0,"z":0},"color":"#c8867a"},{"label":"shoulder-right","geometryType":"sphere","radius":0.06,"position":{"x":-0.18,"y":0.53,"z":0},"rotation":{"x":0,"y":0,"z":0},"color":"#4f86c6"},{"label":"arm-upper-right","geometryType":"cylinder","radiusTop":0.055,"radiusBottom":0.045,"height":0.26,"position":{"x":-0.26,"y":0.42,"z":0.03},"rotation":{"x":0.1,"y":0,"z":2.6},"color":"#4f86c6"},{"label":"elbow-right","geometryType":"sphere","radius":0.045,"position":{"x":-0.32,"y":0.30,"z":0.08},"rotation":{"x":0,"y":0,"z":0},"color":"#4f86c6"},{"label":"arm-lower-right","geometryType":"cylinder","radiusTop":0.045,"radiusBottom":0.035,"height":0.32,"position":{"x":-0.28,"y":0.48,"z":0.12},"rotation":{"x":0.2,"y":0,"z":-0.3},"color":"#4f86c6"},{"label":"shirt-cuff-right","geometryType":"cylinder","radiusTop":0.038,"radiusBottom":0.040,"height":0.05,"position":{"x":-0.26,"y":0.62,"z":0.14},"rotation":{"x":0.2,"y":0,"z":-0.3},"color":"#5a92d4"},{"label":"hand-palm-right","geometryType":"box","width":0.08,"height":0.09,"depth":0.02,"position":{"x":-0.24,"y":0.70,"z":0.15},"rotation":{"x":-0.1,"y":0,"z":-0.1},"color":"#f2c89a"},{"label":"finger-thumb-right","geometryType":"cylinder","radiusTop":0.009,"radiusBottom":0.01,"height":0.06,"position":{"x":-0.18,"y":0.70,"z":0.16},"rotation":{"x":0,"y":0,"z":-1.2},"color":"#f2c89a"},{"label":"finger-index-right","geometryType":"cylinder","radiusTop":0.008,"radiusBottom":0.009,"height":0.07,"position":{"x":-0.20,"y":0.78,"z":0.15},"rotation":{"x":0,"y":0,"z":-0.25},"color":"#f2c89a"},{"label":"finger-middle-right","geometryType":"cylinder","radiusTop":0.008,"radiusBottom":0.009,"height":0.08,"position":{"x":-0.23,"y":0.79,"z":0.15},"rotation":{"x":0,"y":0,"z":-0.05},"color":"#f2c89a"},{"label":"finger-ring-right","geometryType":"cylinder","radiusTop":0.008,"radiusBottom":0.009,"height":0.075,"position":{"x":-0.26,"y":0.78,"z":0.15},"rotation":{"x":0,"y":0,"z":0.1},"color":"#f2c89a"},{"label":"finger-pinky-right","geometryType":"cylinder","radiusTop":0.007,"radiusBottom":0.008,"height":0.06,"position":{"x":-0.29,"y":0.76,"z":0.15},"rotation":{"x":0,"y":0,"z":0.3},"color":"#f2c89a"},{"label":"shoulder-left","geometryType":"sphere","radius":0.06,"position":{"x":0.18,"y":0.51,"z":0},"rotation":{"x":0,"y":0,"z":0},"color":"#4f86c6"},{"label":"arm-upper-left","geometryType":"cylinder","radiusTop":0.055,"radiusBottom":0.045,"height":0.28,"position":{"x":0.23,"y":0.37,"z":0},"rotation":{"x":0,"y":0,"z":-2.9},"color":"#4f86c6"},{"label":"elbow-left","geometryType":"sphere","radius":0.045,"position":{"x":0.26,"y":0.23,"z":0},"rotation":{"x":0,"y":0,"z":0},"color":"#4f86c6"},{"label":"arm-lower-left","geometryType":"cylinder","radiusTop":0.045,"radiusBottom":0.035,"height":0.30,"position":{"x":0.28,"y":0.08,"z":0.02},"rotation":{"x":0.1,"y":0,"z":-3.0},"color":"#4f86c6"},{"label":"shirt-cuff-left","geometryType":"cylinder","radiusTop":0.038,"radiusBottom":0.040,"height":0.05,"position":{"x":0.29,"y":-0.06,"z":0.03},"rotation":{"x":0.1,"y":0,"z":-3.0},"color":"#5a92d4"}]};
+
+    // --- Scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 100);
+    camera.position.set(0.45, 0.55, 1.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 0.42, 0.04);
+    controls.enableDamping = true;
+
+    // Lighting — richer for solid rendering
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    keyLight.position.set(1, 2, 2.5);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xccddff, 0.6);
+    fillLight.position.set(-1.5, 1, 0);
+    scene.add(fillLight);
+    const rimLight = new THREE.DirectionalLight(0xffeedd, 0.4);
+    rimLight.position.set(0, 1.5, -2);
+    scene.add(rimLight);
+    const bottomFill = new THREE.DirectionalLight(0xffffff, 0.2);
+    bottomFill.position.set(0, -1, 1);
+    scene.add(bottomFill);
+
+    // --- Ground Grid ---
+    function createGroundGrid() {
+      const g = new THREE.Group();
+      const size = 1.8, div = 36, cell = size / div;
+      const minor = new THREE.LineBasicMaterial({ color: 0xdddddd });
+      const major = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+      for (let i = 0; i <= div; i++) {
+        const o = -size/2 + i*cell, m = (i%4===0)?major:minor;
+        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-size/2,0,o),new THREE.Vector3(size/2,0,o)]),m));
+        g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(o,0,-size/2),new THREE.Vector3(o,0,size/2)]),m));
+      }
+      const h=size/2;
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-h,.0003,0),new THREE.Vector3(h,.0003,0)]),new THREE.LineBasicMaterial({color:0xcc4444})));
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,.0003,-h),new THREE.Vector3(0,.0003,h)]),new THREE.LineBasicMaterial({color:0x4444cc})));
+      const p=new THREE.Mesh(new THREE.PlaneGeometry(size,size),new THREE.MeshBasicMaterial({color:0xf8f8f8,transparent:true,opacity:0.3,side:THREE.DoubleSide}));
+      p.rotation.x=-Math.PI/2; p.position.y=-0.0005; g.add(p);
+      return g;
+    }
+    scene.add(createGroundGrid());
+
+    // --- Build Model ---
+    const modelGroup = new THREE.Group();
+    modelGroup.name = "Waving Man";
+    const wireMat = new THREE.LineBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.12 });
+
+    for (const part of modelDef.parts) {
+      let geometry; let isTube = false;
+
+      if (part.geometryType === "lathe") {
+        geometry = new THREE.LatheGeometry(part.profilePoints.map(p=>new THREE.Vector2(p.x,p.y)), part.segments??32);
+      } else if (part.geometryType === "cylinder") {
+        geometry = new THREE.CylinderGeometry(part.radiusTop, part.radiusBottom, part.height, part.radialSegments??32);
+      } else if (part.geometryType === "torus") {
+        geometry = new THREE.TorusGeometry(part.radius, part.tubeRadius, part.radialSegments??16, part.tubularSegments??48);
+      } else if (part.geometryType === "box") {
+        geometry = new THREE.BoxGeometry(part.width, part.height, part.depth);
+      } else if (part.geometryType === "sphere") {
+        geometry = new THREE.SphereGeometry(part.radius, part.widthSegments??24, part.heightSegments??18);
+      } else if (part.geometryType === "cone") {
+        geometry = new THREE.ConeGeometry(part.radius, part.height, part.radialSegments??16);
+      } else if (part.geometryType === "plane") { continue;
+      } else if (part.geometryType === "tube") {
+        isTube = true;
+        const pts = part.tubePoints.map(p=>new THREE.Vector3(p.x,p.y,p.z));
+        geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts,false,'catmullrom',0.5), Math.max(16,pts.length*16), part.tubeRadius, 12, false);
+      } else if (part.geometryType === "extrude") {
+        const shape = new THREE.Shape();
+        for (const c of part.pathCommands) {
+          if(c.op==="M") shape.moveTo(c.x,c.y);
+          else if(c.op==="L") shape.lineTo(c.x,c.y);
+          else if(c.op==="Q") shape.quadraticCurveTo(c.cp1x,c.cp1y,c.x,c.y);
+          else if(c.op==="C") shape.bezierCurveTo(c.cp1x,c.cp1y,c.cp2x,c.cp2y,c.x,c.y);
+        }
+        geometry = new THREE.ExtrudeGeometry(shape,{depth:part.depth,bevelEnabled:part.bevelEnabled??false});
+        geometry.translate(0,0,-part.depth/2);
+      }
+      if (!geometry) continue;
+      geometry.computeVertexNormals();
+
+      // Solid opaque material
+      const mat = new THREE.MeshStandardMaterial({
+        color: part.color,
+        roughness: 0.65,
+        metalness: 0.05,
+        side: THREE.FrontSide
+      });
+
+      const mesh = new THREE.Mesh(geometry, mat);
+      mesh.name = part.label;
+      if (part.scale) mesh.scale.set(part.scale.x, part.scale.y, part.scale.z);
+
+      // Very subtle wireframe
+      mesh.add(new THREE.LineSegments(new THREE.WireframeGeometry(geometry), wireMat));
+
+      if (!isTube) {
+        if (part.position) mesh.position.set(part.position.x, part.position.y, part.position.z);
+        if (part.rotation) mesh.rotation.set(part.rotation.x, part.rotation.y, part.rotation.z);
+      }
+      modelGroup.add(mesh);
+    }
+    scene.add(modelGroup);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+
+</body></html>
