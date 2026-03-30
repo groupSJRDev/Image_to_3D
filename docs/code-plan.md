@@ -118,7 +118,9 @@ Loads `examples/decode_prompt.txt` and appends a strict output-format suffix:
 
 ```
 load_prompt()
-  → reads decode_prompt.txt relative to project root
+  → resolves path as: Path(__file__).parent.parent.parent / "examples" / "decode_prompt.txt"
+      (i.e. relative to the module file, not the caller's working directory)
+      This is safe whether running locally or inside Docker at /app
   → appends:
       "After your analysis, output ONLY a single ```json code fence
        containing the parts array. No prose after the JSON block."
@@ -126,6 +128,8 @@ load_prompt()
 ```
 
 **Why the suffix matters:** Gemini writes analysis first. The extractor depends on the JSON fence being last. The suffix enforces this.
+
+**Why path-relative-to-module matters:** `os.getcwd()` varies depending on how the server is started (Poetry, Docker, pytest). Anchoring to `__file__` is stable in all environments.
 
 ---
 
@@ -408,6 +412,13 @@ Two canvas modes toggled via a tab or button:
 
 **`geometryFactory.ts`** — pure function, maps all 8 geometry types to Three.js constructors.
 
+**`resolveColor.ts`** — pure function, mirrors the `resolveColor(label, orig)` logic from the examples. Maps label patterns to material colors (skin, hair, clothing, shoes) overriding the raw JSON `color` field. Called inside `ScenePart.tsx` before setting `meshStandardMaterial color`. Without this, human figures render with flat block colors rather than the resolved skin/clothing tones the examples produce.
+
+```ts
+resolveColor(label: string, orig: string): string
+// e.g. "manA-head-cranium" → FLESH, "manA-hair" → "#222222", "manA-tie" → orig
+```
+
 **`Lighting.tsx`** / **`GroundGrid.tsx`** — shared across both canvas modes.
 
 ---
@@ -465,7 +476,9 @@ services:
     depends_on:
       - backend
     environment:
-      - VITE_API_URL=http://localhost:8010
+      # Inside Docker, containers reach each other by service name — NOT localhost.
+      # "backend" here is the Compose service name above, not a hostname.
+      - VITE_API_URL=http://backend:8010
 ```
 
 ### Backend `Dockerfile` (project root)
@@ -494,12 +507,18 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3010"]
 
 Note: the frontend Dockerfile runs the Vite **dev server** (not a production build). This is intentional for a local-only tool — hot reload works normally.
 
-In `vite.config.ts`, the proxy target switches based on environment:
+**Docker networking note:** The Vite proxy target must differ between local dev and Docker. Inside a Docker network, containers communicate via service name, not `localhost`. `vite.config.ts` reads `VITE_API_URL` to handle both cases:
+
 ```ts
+// vite.config.ts
 proxy: {
   '/api': process.env.VITE_API_URL ?? 'http://localhost:8010'
+  //      ↑ 'http://backend:8010' when in Docker
+  //                               ↑ 'http://localhost:8010' when running locally
 }
 ```
+
+Without this, the frontend container will silently fail to reach the backend — `localhost` inside the frontend container refers to the frontend container itself, not the backend.
 
 ---
 
@@ -562,3 +581,6 @@ DATABASE_URL=sqlite:///./renderer.db  # swap for postgres:// in production
 | Multiple models overlap in scene | Default placement at origin with Y-offset per instance; user adjusts via composer |
 | R3F geometry disposal on re-render | R3F handles automatically when `parts` / `instances` prop changes |
 | API key accidentally committed | `.env` in `.gitignore` — confirmed before first push |
+| Docker frontend can't reach backend | `VITE_API_URL=http://backend:8010` in Compose; `http://localhost:8010` for local dev — proxy target reads from env |
+| `decode_prompt.txt` not found in Docker | `prompt.py` resolves path via `Path(__file__)` not `os.getcwd()` — stable in all environments |
+| Human figures render wrong colors | `resolveColor.ts` mirrors examples' label-pattern color map — called in `ScenePart.tsx` before material is set |
