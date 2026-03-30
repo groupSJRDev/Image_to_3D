@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { renderImage, saveModel, addModelToScene, createScene } from "./api";
+import { useRef, useState } from "react";
+import { renderImage, saveModel, addModelToScene, createScene, ApiError } from "./api";
 import type { ScenePart, SceneInstance, StoredModel } from "./types";
 import { SceneCanvas } from "./three/SceneCanvas";
 import { UploadPanel } from "./components/UploadPanel";
@@ -16,22 +16,24 @@ export default function App() {
   const [rawResponse, setRawResponse] = useState("");
   const [instances, setInstances] = useState<SceneInstance[]>([]);
   const [sceneId, setSceneId] = useState<number | null>(null);
-  const [canSave, setCanSave] = useState(false);
-  const { models, refresh: refreshModels } = useModels();
+  const { models, error: modelsError, refresh: refreshModels } = useModels();
+  const addingToScene = useRef(false);
 
   async function handleRender(file: File) {
     setStatus("loading");
-    setCanSave(false);
     try {
       const result = await renderImage(file);
       setParts(result.parts);
       setRawResponse(result.raw_response);
       setStatus("success");
-      setCanSave(true);
     } catch (err: unknown) {
-      const e = err as { message?: string; raw_response?: string };
-      setErrorMsg(e.message ?? "Unknown error");
-      setRawResponse(e.raw_response ?? "");
+      if (err instanceof ApiError) {
+        setErrorMsg(err.message);
+        setRawResponse(err.raw_response);
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+        setRawResponse("");
+      }
       setStatus("error");
     }
   }
@@ -40,11 +42,13 @@ export default function App() {
     if (!parts.length) return;
     const name = prompt("Model name:", "My Model") ?? "My Model";
     await saveModel(name.trim() || "My Model", parts);
-    setCanSave(false);
     refreshModels();
   }
 
   async function handleAddToScene(model: StoredModel) {
+    if (addingToScene.current) return;
+    addingToScene.current = true;
+    try {
     let sid = sceneId;
     if (!sid) {
       const scene = await createScene("My Scene");
@@ -64,8 +68,12 @@ export default function App() {
       parts: modelWithParts?.parts ?? [],
     };
     setInstances((prev) => [...prev, newInstance]);
+    } finally {
+      addingToScene.current = false;
+    }
   }
 
+  const canSave = parts.length > 0 && status === "success";
   const canvasMode = instances.length > 0 ? "composed" : "single";
 
   return (
@@ -91,6 +99,7 @@ export default function App() {
         <div className="w-52 shrink-0 border-l border-gray-700 bg-gray-900">
           <ModelLibrary
             models={models}
+            error={modelsError}
             onRefresh={refreshModels}
             onAddToScene={handleAddToScene}
           />

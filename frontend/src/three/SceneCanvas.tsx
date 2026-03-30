@@ -1,6 +1,7 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import type { SceneInstance, ScenePart as ScenePartType } from "../types";
+import { CanvasErrorBoundary } from "./CanvasErrorBoundary";
 import { ScenePart } from "./ScenePart";
 import { ModelGroup } from "./ModelGroup";
 import { Lighting } from "./Lighting";
@@ -26,15 +27,17 @@ export function SceneCanvas({ parts = [], instances = [] }: Props) {
         gl={{ antialias: true }}
         style={{ background: "#e8e8e8" }}
       >
-        <Lighting />
-        <GroundGrid />
-        <OrbitControls enableDamping makeDefault target={[0, 0.8, 0]} />
-        {parts.map((p) => (
-          <ScenePart key={p.label} part={p} />
-        ))}
-        {instances.map((inst) => (
-          <ModelGroup key={inst.id} instance={inst} />
-        ))}
+        <CanvasErrorBoundary>
+          <Lighting />
+          <GroundGrid />
+          <OrbitControls enableDamping makeDefault target={[0, 0.8, 0]} />
+          {parts.map((p, i) => (
+            <ScenePart key={`${p.label}-${i}`} part={p} />
+          ))}
+          {instances.map((inst) => (
+            <ModelGroup key={inst.id} instance={inst} />
+          ))}
+        </CanvasErrorBoundary>
       </Canvas>
     </div>
   );

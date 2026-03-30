@@ -4,24 +4,36 @@ import type { StoredModel } from "../types";
 
 interface Props {
   models: StoredModel[];
+  error: string | null;
   onRefresh: () => void;
   onAddToScene: (model: StoredModel) => void;
 }
 
-export function ModelLibrary({ models, onRefresh, onAddToScene }: Props) {
+export function ModelLibrary({ models, error, onRefresh, onAddToScene }: Props) {
   const [renaming, setRenaming] = useState<number | null>(null);
   const [nameInput, setNameInput] = useState("");
+  const [busy, setBusy] = useState<number | null>(null);
 
   async function handleRename(id: number) {
     if (!nameInput.trim()) return;
-    await renameModel(id, nameInput.trim());
-    setRenaming(null);
-    onRefresh();
+    setBusy(id);
+    try {
+      await renameModel(id, nameInput.trim());
+      setRenaming(null);
+      onRefresh();
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function handleDelete(id: number) {
-    await deleteModel(id);
-    onRefresh();
+    setBusy(id);
+    try {
+      await deleteModel(id);
+      onRefresh();
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -30,7 +42,10 @@ export function ModelLibrary({ models, onRefresh, onAddToScene }: Props) {
         Model Library
       </div>
       <div className="flex-1 overflow-y-auto">
-        {models.length === 0 && (
+        {error && (
+          <p className="text-xs text-red-400 p-3">{error}</p>
+        )}
+        {!error && models.length === 0 && (
           <p className="text-xs text-gray-600 p-3">No saved models yet.</p>
         )}
         {models.map((m) => (
@@ -55,20 +70,25 @@ export function ModelLibrary({ models, onRefresh, onAddToScene }: Props) {
                 </div>
                 <div className="flex gap-1 mt-1">
                   <button
+                    disabled={busy === m.id}
                     onClick={() => onAddToScene(m)}
-                    className="flex-1 py-0.5 rounded bg-blue-700 hover:bg-blue-600 text-xs text-white"
+                    className="flex-1 py-0.5 rounded bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-xs text-white"
                   >
                     + Scene
                   </button>
                   <button
+                    disabled={busy === m.id}
+                    aria-label={`Rename ${m.name}`}
                     onClick={() => { setRenaming(m.id); setNameInput(m.name); }}
-                    className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-xs text-gray-300"
+                    className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-xs text-gray-300"
                   >
                     ✎
                   </button>
                   <button
+                    disabled={busy === m.id}
+                    aria-label={`Delete ${m.name}`}
                     onClick={() => handleDelete(m.id)}
-                    className="px-2 py-0.5 rounded bg-gray-700 hover:bg-red-800 text-xs text-gray-300"
+                    className="px-2 py-0.5 rounded bg-gray-700 hover:bg-red-800 disabled:opacity-40 text-xs text-gray-300"
                   >
                     ✕
                   </button>

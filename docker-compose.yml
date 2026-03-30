@@ -14,6 +14,7 @@ services:
     ports:
       - "3010:3010"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       - VITE_API_URL=http://backend:8010

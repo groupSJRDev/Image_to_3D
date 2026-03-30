@@ -1,19 +1,20 @@
 [project]
 name = "2026-03030-vml-3d-renderer"
 version = "0.1.0"
-description = ""
+description = "LLM-powered image-to-3D scene pipeline using Gemini and Three.js"
 authors = [
-    {name = "Your Name",email = "you@example.com"}
+    {name = "VML Dev Team"}
 ]
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.111.0",
-    "uvicorn[standard]>=0.29.0",
-    "python-multipart>=0.0.9",
-    "google-generativeai>=0.7.0",
-    "python-dotenv>=1.0.0",
-    "sqlmodel>=0.0.19",
+    "fastapi>=0.111.0,<1.0.0",
+    "uvicorn[standard]>=0.29.0,<1.0.0",
+    "python-multipart>=0.0.9,<1.0.0",
+    "google-generativeai>=0.7.0,<1.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
+    "sqlmodel>=0.0.19,<1.0.0",
+    "slowapi>=0.1.9,<1.0.0",
 ]
 
 [project.scripts]

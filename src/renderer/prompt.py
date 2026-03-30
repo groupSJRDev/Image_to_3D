@@ -1,4 +1,7 @@
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _PROMPT_PATH = Path(__file__).parent.parent.parent / "examples" / "decode_prompt.txt"
 
@@ -20,6 +23,16 @@ Rules:
 """
 
 
+def validate_prompt_exists() -> None:
+    """Call at startup to fail fast if the prompt file is missing."""
+    if not _PROMPT_PATH.exists():
+        raise FileNotFoundError(
+            f"Prompt file not found at {_PROMPT_PATH}. "
+            "Ensure the examples/ directory is present."
+        )
+
+
 def load_prompt() -> str:
     text = _PROMPT_PATH.read_text(encoding="utf-8")
+    logger.info("Prompt loaded, %d chars", len(text))
     return text + _OUTPUT_SUFFIX

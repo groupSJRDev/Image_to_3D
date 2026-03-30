@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Props {
   onRender: (file: File) => void;
@@ -10,6 +10,12 @@ export function UploadPanel({ onRender, loading }: Props) {
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
 
   function handleFile(f: File) {
     setFile(f);
@@ -26,6 +32,8 @@ export function UploadPanel({ onRender, loading }: Props) {
   return (
     <div className="flex flex-col gap-3 p-3 h-full">
       <div
+        role="button"
+        aria-label="Upload image for 3D rendering"
         className={`border-2 border-dashed rounded-lg flex flex-col items-center justify-center p-4 cursor-pointer transition-colors
           ${dragging ? "border-blue-400 bg-blue-950/20" : "border-gray-600 hover:border-gray-400"}`}
         onClick={() => inputRef.current?.click()}

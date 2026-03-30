@@ -3,14 +3,40 @@ import type {
   StoredModel, Transform,
 } from "./types";
 
+export class ApiError extends Error {
+  readonly raw_response: string;
+  readonly status: number;
+
+  constructor(message: string, status: number, raw_response: string = "") {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.raw_response = raw_response;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw Object.assign(new Error(body.error ?? res.statusText), { raw_response: body.raw_response ?? "" });
+    const detail = body.detail ?? body.error ?? res.statusText;
+    const message = typeof detail === "object" ? detail.error ?? res.statusText : detail;
+    const raw = typeof detail === "object" ? detail.raw_response ?? "" : body.raw_response ?? "";
+    throw new ApiError(message, res.status, raw);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+async function requestVoid(path: string, init?: RequestInit): Promise<void> {
+  const res = await fetch(path, init);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    const detail = body.detail ?? body.error ?? res.statusText;
+    const message = typeof detail === "object" ? detail.error ?? res.statusText : detail;
+    const raw = typeof detail === "object" ? detail.raw_response ?? "" : body.raw_response ?? "";
+    throw new ApiError(message, res.status, raw);
+  }
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────
@@ -52,7 +78,7 @@ export function renameModel(id: number, name: string): Promise<StoredModel> {
 }
 
 export function deleteModel(id: number): Promise<void> {
-  return request(`/api/models/${id}`, { method: "DELETE" });
+  return requestVoid(`/api/models/${id}`, { method: "DELETE" });
 }
 
 // ── Scene composer ───────────────────────────────────────────────────────────
@@ -74,7 +100,7 @@ export function getScene(id: number): Promise<ComposedScene> {
 }
 
 export function deleteScene(id: number): Promise<void> {
-  return request(`/api/scenes/${id}`, { method: "DELETE" });
+  return requestVoid(`/api/scenes/${id}`, { method: "DELETE" });
 }
 
 export function addModelToScene(
@@ -102,5 +128,5 @@ export function updateInstance(
 }
 
 export function removeInstance(sceneId: number, instanceId: number): Promise<void> {
-  return request(`/api/scenes/${sceneId}/instances/${instanceId}`, { method: "DELETE" });
+  return requestVoid(`/api/scenes/${sceneId}/instances/${instanceId}`, { method: "DELETE" });
 }

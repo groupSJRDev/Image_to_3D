@@ -13,8 +13,8 @@ export function ModelGroup({ instance }: Props) {
       rotation={[rot.x, rot.y, rot.z]}
       scale={[sc.x, sc.y, sc.z]}
     >
-      {parts.map((p) => (
-        <ScenePart key={p.label} part={p} />
+      {parts.map((p, i) => (
+        <ScenePart key={`${p.label}-${i}`} part={p} />
       ))}
     </group>
   );

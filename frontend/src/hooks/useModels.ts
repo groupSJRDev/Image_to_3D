@@ -4,16 +4,18 @@ import type { StoredModel } from "../types";
 
 export function useModels() {
   const [models, setModels] = useState<StoredModel[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
+      setError(null);
       setModels(await listModels());
-    } catch {
-      // silent — library is non-critical
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load models");
     }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  return { models, refresh };
+  return { models, error, refresh };
 }

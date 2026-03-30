@@ -1,5 +1,8 @@
 import json
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractionError(Exception):
@@ -25,6 +28,7 @@ def extract_scene_json(response_text: str) -> dict:
         candidate = fence_matches[-1].group(1).strip()
         parsed = _try_parse(candidate)
         if parsed is not None:
+            logger.info("Extraction succeeded via json fence (pass 1)")
             return _normalise(parsed)
 
     # Pass 2 — last bare JSON array or object
@@ -33,8 +37,10 @@ def extract_scene_json(response_text: str) -> dict:
         candidate = array_matches[-1].group(1).strip()
         parsed = _try_parse(candidate)
         if parsed is not None:
+            logger.info("Extraction succeeded via regex fallback (pass 2)")
             return _normalise(parsed)
 
+    logger.error("Extraction failed: no valid JSON found in response (%d chars)", len(response_text))
     raise ExtractionError(
         "Could not extract valid JSON from model response",
         raw_response=response_text,
@@ -58,4 +64,7 @@ def _normalise(parsed) -> dict:
         for key, val in parsed.items():
             if isinstance(val, list):
                 return {"parts": val}
-    return {"parts": []}
+    raise ExtractionError(
+        "JSON response did not contain a recognisable parts array",
+        raw_response=str(parsed),
+    )

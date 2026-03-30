@@ -121,7 +121,7 @@ When saving a memory, append a new entry using this exact format:
 - **Category:** Reference
 - **Tags:** #threejs #3d #r3f #lighting #rendering
 - **Memory:**
-  Both examples use **Three.js v0.160.0** via unpkg CDN. Conventions to preserve in generated output:
+  The example HTML files reference **Three.js v0.160.0** via unpkg CDN. The React app uses **Three.js ^0.183.2** with R3F v9.x and drei v10.x — the examples are style references, not version targets. Conventions to preserve in generated output:
   - **Lighting:** AmbientLight + 3–4 DirectionalLights (key, fill, rim, bottom-fill)
   - **Camera:** PerspectiveCamera + OrbitControls, damping enabled
   - **Materials:** `MeshStandardMaterial` roughness `0.65`, metalness `0.05`
@@ -490,3 +490,64 @@ When saving a memory, append a new entry using this exact format:
 - **Significance:**
   The file upload gap is the most urgent (DoS via large file). The `json.loads` gap is the most surprising (data the system itself wrote can crash it on read-back). Fixing these requires adding `Field()` constraints to Pydantic models and wrapping `json.loads` calls — straightforward but must be done systematically across all endpoints.
 - **Related Entries:** Observability Gap, Implemented Project Structure
+
+---
+
+## [2026-03-30 16:00] — Audit Hardening: Phases 1–5 + Partial Phase 6 Complete
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Summation
+- **Tags:** #architecture #fastapi #react #r3f #docker #security #observability #debugging
+- **Memory:**
+  Completed all 9 CRITICAL and 10 HIGH audit findings, plus 7 of 11 MEDIUM items. Changes span backend, frontend, and infrastructure:
+
+  **Backend (server.py, extractor.py, prompt.py, models.py):**
+  - Structured JSON logging via `logging` module with `JSONFormatter`. Log points: request entry, Gemini call timing, extraction outcome, all error paths. `LOG_LEVEL` env var controls verbosity.
+  - File upload validation: 10MB size limit, MIME allowlist (`jpeg/png/webp`), magic-byte verification.
+  - Specific exception handling on Gemini call: `GoogleAPIError` → 502, `ConnectionError/TimeoutError` → 503, `ExtractionError` → 422 with raw response, generic `Exception` → 500 with no detail leak.
+  - `reload=True` gated on `ENV != "production"`.
+  - Pydantic `Field()` constraints: `max_length=255` on strings, `max_length=1000` on parts list, bounded floats on position/rotation/scale.
+  - `_safe_load_parts()` helper wraps all `json.loads(parts_json)` calls — corrupt DB data returns `[]` with a warning log instead of crashing.
+  - Rate limiting via `slowapi` on `/api/render` only (default `10/minute`, configurable via `RATE_LIMIT` env var).
+  - Prompt file existence validated at startup via `validate_prompt_exists()` in lifespan.
+  - Extractor `_normalise()` now raises `ExtractionError` instead of silently returning `{"parts": []}`.
+  - `SceneInstance` foreign keys have `index=True` and `ondelete="CASCADE"`. Manual loop-delete in `delete_scene` removed.
+  - N+1 query in `get_scene` fixed — bulk-loads `StoredModel` rows. `_serialise_instance` now accepts `Optional[StoredModel]` directly instead of a session.
+
+  **Frontend (ScenePart, GroundGrid, UploadPanel, api.ts, App.tsx, SceneCanvas, ModelGroup, useModels, ModelLibrary):**
+  - `useEffect` cleanup for geometry/wireframe `.dispose()` in `ScenePart.tsx` and full traverse disposal in `GroundGrid.tsx` — fixes VRAM leak.
+  - `URL.revokeObjectURL()` cleanup in `UploadPanel.tsx` — fixes blob URL leak.
+  - Typed `ApiError` class in `api.ts` replaces `Object.assign(new Error(...))`. Handles both flat error strings and `{error, raw_response}` detail objects from the updated backend.
+  - `App.tsx` catch blocks use `instanceof ApiError` instead of unsafe cast.
+  - React key collisions fixed: `key={\`${p.label}-${i}\`}` in `SceneCanvas` and `ModelGroup`.
+  - `CanvasErrorBoundary` wraps `<Canvas>` children — catches R3F render errors with reset button.
+  - `useModels` exposes `error` state; `ModelLibrary` displays it.
+  - `canSave` derived from `parts.length > 0 && status === "success"` instead of independent state.
+  - Race condition guard (`addingToScene` ref) in `handleAddToScene`.
+
+  **Infrastructure (Dockerfiles, docker-compose.yml, vite.config.ts, pyproject.toml):**
+  - Both containers run as non-root `app` user (UID 1000).
+  - Backend `HEALTHCHECK` hitting `/health`. Frontend `depends_on: condition: service_healthy`.
+  - Vite proxy uses object form with `changeOrigin: true`.
+  - `slowapi>=0.1.9` added to dependencies.
+
+- **Significance:**
+  The codebase is now hardened against all 38 audit findings except one: **audit item 4.2 — CI/CD pipeline** remains unimplemented. There are no GitHub Actions, no pre-commit hooks, and no automated lint/type-check/test on push. The ESLint config exists but nothing enforces it. This requires decisions on: (1) GitHub Actions vs. other CI, (2) test framework choices (pytest for backend, vitest for frontend), (3) workflow triggers (push, PR, branch rules). This should be discussed with the project owner before implementation.
+- **Related Entries:** Implemented Project Structure, Observability Gap, Input Validation Absent, useMemo Geometry Bypasses R3F
+
+---
+
+## [2026-03-30 16:01] — Decision: Three.js Version — Keep Current, Update Docs
+
+- **Agent/Model:** Claude Opus 4.6
+- **Category:** Decision
+- **Tags:** #threejs #r3f #architecture
+- **Memory:**
+  Per the implementation plan's decision register, the Three.js version mismatch (agent-memories say v0.160.0, `package.json` has `^0.183.2`) is resolved by keeping the current versions. Downgrading Three.js, R3F, and drei to v0.160.0-era packages is high-risk for no clear benefit.
+
+  The examples reference v0.160.0 via CDN — they are **style references**, not version targets. The "Three.js Rendering" memory entry (10:04) should be updated to reflect v0.183.x as the actual version when the LOW issues are addressed.
+
+  Rejected alternative: downgrading to v0.160.0 + matching R3F/drei versions.
+- **Significance:**
+  Prevents future agents from attempting a risky version downgrade. The examples and the React app use different rendering approaches (imperative vs. R3F) so version parity is not required.
+- **Related Entries:** Three.js Rendering Patterns, Frontend Stack Decision

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 
 export function GroundGrid() {
@@ -37,6 +37,21 @@ export function GroundGrid() {
     g.add(plane);
     return g;
   }, []);
+
+  useEffect(() => {
+    return () => {
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Line || obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            (obj.material as THREE.Material).dispose();
+          }
+        }
+      });
+    };
+  }, [group]);
 
   return <primitive object={group} />;
 }

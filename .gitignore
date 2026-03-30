@@ -23,6 +23,13 @@ env/
 .vscode/
 .idea/
 
+# Database
+*.db
+
+# Frontend build output
+frontend/dist/
+frontend/node_modules/
+
 # OS
 .DS_Store
 Thumbs.db

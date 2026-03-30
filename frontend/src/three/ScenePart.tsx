@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { ScenePart as ScenePartType } from "../types";
 import { buildGeometry } from "./geometryFactory";
@@ -19,6 +19,13 @@ export function ScenePart({ part }: Props) {
     () => (geometry ? new THREE.WireframeGeometry(geometry) : null),
     [geometry]
   );
+
+  useEffect(() => {
+    return () => {
+      geometry?.dispose();
+      wireframeGeo?.dispose();
+    };
+  }, [geometry, wireframeGeo]);
 
   if (!geometry) return null;
 
