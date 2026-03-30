@@ -2,42 +2,44 @@
 
 ## Overview
 
-A locally-hosted web app that accepts an image upload, sends it to the Gemini API with the structured decode prompt, receives a JSON scene description, and renders it interactively in Three.js — all in one browser session.
+A locally-hosted web app that accepts an image upload, sends it to the Gemini API with the structured decode prompt, receives a JSON scene description, and renders it interactively in Three.js. Rendered models are persisted to a database and can be composed together into larger multi-model scenes — all running locally via Docker.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Browser (localhost)               │
-│                                                     │
-│  ┌──────────────┐    ┌──────────────────────────┐   │
-│  │  Upload UI   │───▶│   Three.js Render Panel  │   │
-│  │  + Status    │    │   (interactive scene)    │   │
-│  └──────┬───────┘    └──────────────────────────┘   │
-│         │  fetch()                    ▲              │
-└─────────│────────────────────────────│──────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                    Browser (localhost:3010)                       │
+│                                                                  │
+│  ┌──────────────┐   ┌──────────────────────────┐  ┌───────────┐ │
+│  │  Upload UI   │──▶│   Three.js Scene Canvas  │  │  Model    │ │
+│  │  + Status    │   │   (single or composed)   │  │  Library  │ │
+│  └──────┬───────┘   └──────────────────────────┘  │  + Scene  │ │
+│         │  fetch()                    ▲            │  Composer │ │
+└─────────│────────────────────────────│────────────┴───────────┘─┘
           │                            │ JSON scene
           ▼                            │
-┌─────────────────────────────────────┤
-│        FastAPI Server (Python)       │
-│        localhost:8000                │
-│                                     │
-│  POST /render                        │
-│   • receives image bytes             │
-│   • loads decode_prompt.txt          │
-│   • calls Gemini API (multimodal)    │
-│   • extracts + validates JSON        │
-│   • returns scene JSON               │
-└─────────────────┬───────────────────┘
-                  │
-                  ▼
-         Google Gemini API
-         (gemini-2.5-pro or configured model)
+┌─────────────────────────────────────┴───────────────────────────┐
+│              FastAPI Server  (localhost:8010)                    │
+│                                                                  │
+│  POST /api/render      — image → Gemini → parts JSON            │
+│  POST /api/models      — save rendered model to DB              │
+│  GET  /api/models      — list stored models                     │
+│  GET  /api/models/{id} — fetch a model's parts                  │
+│  POST /api/scenes      — create a named scene                   │
+│  POST /api/scenes/{id}/instances — place a model in a scene     │
+│  PATCH/DELETE …        — update transforms, remove instances     │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+               ┌──────────────┴──────────────┐
+               │                             │
+               ▼                             ▼
+      Google Gemini API               SQLite (local)
+      (multimodal LLM)               → PostgreSQL (production)
 ```
 
-**Single Python process, no database, no build step.** The server serves the HTML frontend as a static file and handles the API proxy call.
+**Two Docker containers, no manual process management.** `docker compose up` starts everything.
 
 ---
 
@@ -45,168 +47,140 @@ A locally-hosted web app that accepts an image upload, sends it to the Gemini AP
 
 | Layer | Choice | Reason |
 |---|---|---|
-| Backend | FastAPI + Uvicorn | Async, minimal, already in Python ecosystem |
-| Frontend | Vanilla HTML/CSS/JS | No build toolchain; consistent with examples |
-| 3D Rendering | Three.js v0.160.0 | Matches existing examples exactly |
+| Backend | FastAPI + Uvicorn | Async, minimal, fits Python ecosystem |
+| Frontend framework | React 18 + Vite | Component model suits the multi-panel UI |
+| 3D rendering | Three.js v0.160.0 via `@react-three/fiber` | Matches existing examples; R3F handles disposal |
+| Styling | Tailwind CSS | Fast to iterate without a design system |
 | LLM | Google Gemini (multimodal) | Supports image + text in one API call |
-| API client | `google-generativeai` Python SDK | Official SDK, handles auth cleanly |
+| LLM SDK | `google-generativeai` Python SDK | Official SDK, server-side only |
+| Database | SQLModel + SQLite (local) | Lightweight, zero config; `DATABASE_URL` swaps to Postgres |
+| Container | Docker + Docker Compose | Single command startup; reproducible environment |
+
+---
+
+## Ports
+
+| Service | Port |
+|---|---|
+| FastAPI backend | `8010` |
+| React / Vite frontend | `3010` |
+
+Vite proxies `/api/*` → `localhost:8010`. The API key never touches the browser.
 
 ---
 
 ## Component Breakdown
 
-### 1. Backend — `src/renderer/server.py`
+### 1. Backend — `src/renderer/`
 
-A FastAPI app with two routes:
+**`server.py`** — FastAPI app. Full route list in [code-plan.md](code-plan.md).
 
-**`GET /`**
-Serves `frontend/index.html` as a static file.
+**`prompt.py`** — loads `examples/decode_prompt.txt` (read-only, never modified) and appends a strict output-format suffix so Gemini always terminates its response with a fenced JSON block.
 
-**`POST /render`**
-- Accepts `multipart/form-data` with an image file
-- Loads `examples/decode_prompt.txt` (the structured analysis prompt)
-- Calls `gemini.generate_content([prompt_text, image_part])`
-- Extracts the JSON block from the LLM response (the response will contain analysis text followed by a JSON code fence)
-- Validates the JSON is parseable
-- Returns `{ "parts": [...] }` to the browser
+**`extractor.py`** — two-pass JSON extractor: finds the last ` ```json ` fence, falls back to regex on failure. Raises `ExtractionError` with the raw response attached so failures are diagnosable.
 
-**`GET /prompt`** *(optional, useful for debugging)*
-Returns the current decode prompt text so you can inspect it from the browser.
+**`database.py`** — SQLModel engine + session factory. `DATABASE_URL` defaults to `sqlite:///./renderer.db`; set it in `.env` to switch to PostgreSQL.
 
-### 2. Frontend — `src/renderer/frontend/index.html`
+**`models.py`** — three ORM tables:
+- `StoredModel` — parts JSON + metadata for each generated model
+- `Scene` — a named collection of model placements
+- `SceneInstance` — one model in a scene with its own position/rotation/scale transform
 
-A single HTML file with three panels:
+### 2. Frontend — `frontend/src/`
 
-**Upload Panel**
-- Drag-and-drop or click-to-browse image input
-- Image preview
-- "Render" button
-- Status indicator (idle / loading / error)
+**Upload flow** — `UploadPanel` (drag-and-drop) → `POST /api/render` → parts JSON → `SceneCanvas` renders the model. A "Save to Library" button in the toolbar calls `POST /api/models` to persist it.
 
-**Three.js Render Panel**
-- Takes up the bulk of the screen
-- Receives the JSON from the server response
-- Builds the scene using the same pattern as `example2.html`
-- OrbitControls for camera, ground grid, standard lighting rig
-- "Reset camera" button
+**Model Library** — right sidebar. `ModelLibrary` lists all stored models (via `useModels` hook). Each `ModelCard` has "Add to Scene" and delete/rename actions.
 
-**Debug Panel** *(collapsible)*
-- Shows raw JSON returned from API
-- Shows any error messages from the server
+**Scene Composer** — below the library. Shows instances in the current composed scene with position/rotation inputs. Calls `PATCH /api/scenes/{id}/instances/{iid}` on change. New/Load/Save scene controls at the top.
 
-### 3. Prompt Loader — `src/renderer/prompt.py`
+**`SceneCanvas`** — R3F Canvas. Two modes:
+- *Single model* — renders `ScenePart[]` from a fresh render
+- *Composed scene* — renders `SceneInstance[]`, each wrapped in a `ModelGroup` that applies a group-level transform before rendering its parts
 
-A small utility that loads `examples/decode_prompt.txt` and prepends any runtime instructions (e.g. "Output ONLY a JSON code fence after your analysis — no prose after the JSON block.").
+**`geometryFactory.ts`** — maps all 8 geometry types (`box`, `cylinder`, `sphere`, `cone`, `torus`, `lathe`, `tube`, `extrude`) to Three.js constructors.
 
-### 4. JSON Extractor — `src/renderer/extractor.py`
-
-Parses the Gemini response text to extract the JSON. The LLM will output analysis followed by a fenced JSON block. Strategy:
-
-1. Find the last ` ```json ` fence in the response
-2. Extract content between fences
-3. `json.loads()` to validate
-4. If that fails, try regex for the outermost `[...]` or `{...}` block as a fallback
+**`DebugPanel`** — collapsible bottom panel. Two tabs: Scene JSON and raw Gemini response text.
 
 ---
 
-## Data Flow (step by step)
+## Data Flow
 
+### Render a new model
 ```
-1. User drops image onto Upload Panel
-2. Browser previews the image
-3. User clicks "Render"
-4. Browser POSTs FormData { image: <file> } to localhost:8000/render
-5. Server reads image bytes → base64 encodes for Gemini
-6. Server builds prompt: decode_prompt.txt + output format instruction
-7. Server calls Gemini API → streams or awaits response
-8. Server extracts JSON from response text
-9. Server returns { "scene": { "parts": [...] } } with HTTP 200
-   (or { "error": "...", "raw": "..." } with HTTP 422 on parse failure)
-10. Browser receives JSON
-11. Browser clears existing Three.js scene
-12. Browser iterates parts[], builds geometries, adds to scene
-13. Three.js renders the interactive scene
-14. User can orbit, inspect, and upload another image
+1.  User drops image → UploadPanel
+2.  Click "Render" → POST /api/render (multipart)
+3.  Server: load prompt → call Gemini API → extract JSON
+4.  Server returns { parts: [...], raw_response: "..." }
+5.  SceneCanvas rebuilds scene from parts[]
+6.  User clicks "Save to Library" → POST /api/models { name, parts }
+7.  Model appears in ModelLibrary sidebar
+```
+
+### Compose a multi-model scene
+```
+1.  User clicks "Add to Scene" on a ModelCard
+2.  POST /api/scenes/{id}/instances { model_id, position, rotation, scale }
+3.  SceneInstance returned → SceneComposer adds it to the list
+4.  SceneCanvas switches to composed mode: renders ModelGroup per instance
+5.  User adjusts position inputs → PATCH /api/scenes/{id}/instances/{iid}
+6.  Scene updates live
 ```
 
 ---
 
 ## Implementation Phases
 
-### Phase 1 — Scaffold & Serve (no LLM yet)
-- Add `fastapi` and `uvicorn` to `pyproject.toml`
-- Create `src/renderer/server.py` with `GET /` and a stub `POST /render` that returns hardcoded JSON from `example1.html`
-- Create `src/renderer/frontend/index.html` with upload UI + Three.js renderer that consumes the stub JSON
-- Verify the end-to-end render pipeline works locally before touching the LLM
+| Phase | Scope |
+|---|---|
+| 1 | Python backend: FastAPI, Gemini integration, prompt + extractor |
+| 2 | React frontend: upload UI, SceneCanvas, geometryFactory, debug panel |
+| 3 | Docker: `docker-compose.yml`, backend + frontend Dockerfiles |
+| 4 | Database: StoredModel, model library routes + UI |
+| 5 | Scene composer: Scene + SceneInstance tables, composer routes + UI |
 
-### Phase 2 — Gemini Integration
-- Add `google-generativeai` to `pyproject.toml`
-- Create `src/renderer/prompt.py` and `src/renderer/extractor.py`
-- Wire `POST /render` to call Gemini with the image and decode prompt
-- Test with a known image (one of the bowing-men reference images) and compare output to example1.html
-
-### Phase 3 — Error Handling & UX
-- Handle Gemini API errors (rate limit, invalid image, malformed JSON)
-- Show a loading spinner during the API call (Gemini can take 10–30s for complex scenes)
-- Display the raw LLM response in the debug panel so failures are diagnosable
-- Add a retry button
-
-### Phase 4 — Quality of Life
-- "Download JSON" button to save the scene description
-- "Download HTML" button to produce a standalone file like the examples
-- Environment variable config for API key (`GEMINI_API_KEY`) via a `.env` file + `python-dotenv`
-- Simple CLI entry point: `poetry run renderer` starts the server
+Full per-phase detail in [code-plan.md](code-plan.md).
 
 ---
 
-## Key Decisions & Risks
+## Key Decisions
 
 | Decision | Rationale |
 |---|---|
-| API key stays server-side | Never expose the Gemini key in browser JS |
-| Single HTML file frontend | No npm, no bundler — stays consistent with examples |
-| Reuse `decode_prompt.txt` verbatim | The prompt was hard-won (see agent-memories); don't paraphrase it |
-| Extract JSON from last code fence | Gemini tends to put analysis first; the JSON block is always last |
-| Three.js served from CDN | Consistent with examples; no local copy to maintain |
+| API key server-side only | Never exposed in browser JS |
+| `decode_prompt.txt` is read-only | Joint chain system is hard-won; the prompt must not be paraphrased |
+| Extract JSON from last code fence | Gemini always puts analysis before the JSON block |
+| SQLite → Postgres via env var | Zero-config local dev; one-line swap for production |
+| Vite dev server in Docker | Local-only tool — hot reload is more useful than a prod build |
+| `ModelGroup` wraps each scene instance | Lets the same stored model appear at different positions/rotations in any scene |
 
-**Main risk:** Gemini response JSON may have connectivity errors (floating limbs) despite the joint-chain prompt. Plan: surface raw JSON in debug panel so failures are visible and the prompt can be iterated.
-
----
-
-## File Layout After Implementation
-
-```
-src/renderer/
-├── __init__.py
-├── server.py          # FastAPI app
-├── prompt.py          # Loads + assembles decode prompt
-├── extractor.py       # Pulls JSON from LLM response text
-└── frontend/
-    └── index.html     # Single-file UI + Three.js renderer
-
-examples/
-├── decode_prompt.txt  # Source of truth for LLM prompt (read-only)
-├── example1.html
-└── example2.html
-```
+**Main risk:** Gemini response JSON may have connectivity issues despite the joint-chain prompt. The debug panel surfaces the raw response so the prompt can be iterated without code changes.
 
 ---
 
 ## Running Locally
 
+### Docker (recommended)
 ```bash
-# Install deps
-poetry install
-
-# Set API key — create a .env file in the project root:
-# GEMINI_API_KEY=your_key_here
-cp .env.example .env   # then fill in your key
-
-# Start server
-poetry run uvicorn renderer.server:app --reload --port 8000
-
-# Open browser
-open http://localhost:8000
+docker compose up --build
+# Frontend → http://localhost:3010
+# Backend  → http://localhost:8010
 ```
 
-The server loads `GEMINI_API_KEY` from a `.env` file in the project root via `python-dotenv`. The `.env` file must never be committed — ensure `.env` is in `.gitignore`.
+### Without Docker (two terminals)
+```bash
+# Terminal 1
+poetry install && poetry run renderer   # → http://localhost:8010
+
+# Terminal 2
+cd frontend && npm install && npm run dev  # → http://localhost:3010
+```
+
+`.env` (project root — git-ignored):
+```
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-2.0-pro-exp        # optional
+DATABASE_URL=sqlite:///./renderer.db   # swap for postgres:// in production
+```
+
+The `.env` file must never be committed — it is listed in `.gitignore`.
