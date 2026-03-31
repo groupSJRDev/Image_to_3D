@@ -7,6 +7,7 @@ import { PartGroup } from "./PartGroup";
 import { ModelGroup } from "./ModelGroup";
 import { Lighting } from "./Lighting";
 import { GroundGrid } from "./GroundGrid";
+import { useSceneRaycast } from "./useSceneRaycast";
 
 interface Props {
   parts?: ScenePartType[];
@@ -44,30 +45,73 @@ export function SceneCanvas({
         camera={{ position: [0.8, 1.3, 3.2], fov: 45, near: 0.01, far: 100 }}
         gl={{ antialias: true }}
         style={{ background: "#e8e8e8" }}
-        onPointerMissed={() => onSelect?.(null, false)}
       >
         <CanvasErrorBoundary>
           <Lighting />
           <GroundGrid />
           <OrbitControls enableDamping makeDefault target={[0, 0.8, 0]} />
-          {Object.entries(grouped).map(([groupName, groupParts]) => (
-            <PartGroup
-              key={groupName}
-              groupName={groupName}
-              parts={groupParts}
-              isGroupSelected={groupName === selectedGroup}
-              selectedLabel={selectedLabel}
-              editMode={editMode}
-              onSelect={onSelect ?? (() => {})}
-              onTransformEnd={onTransformEnd ?? (() => {})}
-              onGroupTransformEnd={onGroupTransformEnd ?? (() => {})}
-            />
-          ))}
-          {instances.map((inst) => (
-            <ModelGroup key={inst.id} instance={inst} />
-          ))}
+          <SceneRaycaster
+            grouped={grouped}
+            instances={instances}
+            selectedGroup={selectedGroup}
+            selectedLabel={selectedLabel}
+            editMode={editMode}
+            onSelect={onSelect}
+            onTransformEnd={onTransformEnd}
+            onGroupTransformEnd={onGroupTransformEnd}
+          />
         </CanvasErrorBoundary>
       </Canvas>
     </div>
+  );
+}
+
+interface SceneRaycasterProps {
+  grouped: Record<string, ScenePartType[]>;
+  instances: SceneInstance[];
+  selectedGroup: string | null;
+  selectedLabel: string | null;
+  editMode: EditMode;
+  onSelect?: (label: string | null, altKey: boolean) => void;
+  onTransformEnd?: (label: string, pos: Vec3, rot: Vec3) => void;
+  onGroupTransformEnd?: (groupName: string, parts: ScenePartType[], delta: Vec3) => void;
+}
+
+// Inner component that can use useThree() (must be inside <Canvas>)
+function SceneRaycaster({
+  grouped,
+  instances,
+  selectedGroup,
+  selectedLabel,
+  editMode,
+  onSelect,
+  onTransformEnd,
+  onGroupTransformEnd,
+}: SceneRaycasterProps) {
+  const { registerMesh, unregisterMesh } = useSceneRaycast({
+    onHit: (label, altKey) => onSelect?.(label, altKey),
+    onMiss: () => onSelect?.(null, false),
+  });
+
+  return (
+    <>
+      {Object.entries(grouped).map(([groupName, groupParts]) => (
+        <PartGroup
+          key={groupName}
+          groupName={groupName}
+          parts={groupParts}
+          isGroupSelected={groupName === selectedGroup}
+          selectedLabel={selectedLabel}
+          editMode={editMode}
+          onTransformEnd={onTransformEnd ?? (() => {})}
+          onGroupTransformEnd={onGroupTransformEnd ?? (() => {})}
+          registerMesh={registerMesh}
+          unregisterMesh={unregisterMesh}
+        />
+      ))}
+      {instances.map((inst) => (
+        <ModelGroup key={inst.id} instance={inst} />
+      ))}
+    </>
   );
 }

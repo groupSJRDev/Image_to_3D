@@ -34,6 +34,7 @@ export function GroundGrid() {
     );
     plane.rotation.x = -Math.PI / 2;
     plane.position.y = -0.002;
+    plane.raycast = () => {};  // exclude from raycaster — prevents blocking clicks on scene parts
     g.add(plane);
     return g;
   }, []);

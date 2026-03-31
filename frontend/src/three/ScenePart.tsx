@@ -10,8 +10,9 @@ interface Props {
   isSelected?: boolean;     // emissive highlight (group OR individual)
   showGizmo?: boolean;      // show TransformControls (only for individual alt-click)
   editMode?: EditMode;
-  onSelect?: (label: string, altKey: boolean) => void;
   onTransformEnd?: (label: string, pos: Vec3, rot: Vec3) => void;
+  registerMesh?: (label: string, mesh: THREE.Mesh) => void;
+  unregisterMesh?: (label: string) => void;
 }
 
 export function ScenePart({
@@ -19,8 +20,9 @@ export function ScenePart({
   isSelected = false,
   showGizmo,
   editMode = "translate",
-  onSelect,
   onTransformEnd,
+  registerMesh,
+  unregisterMesh,
 }: Props) {
   // showGizmo defaults to isSelected when not explicitly set
   const shouldShowGizmo = showGizmo ?? isSelected;
@@ -45,6 +47,15 @@ export function ScenePart({
 
   const [meshObj, setMeshObj] = useState<THREE.Mesh | null>(null);
   const tcRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (meshObj && registerMesh) {
+      registerMesh(part.label, meshObj);
+    }
+    return () => {
+      if (unregisterMesh) unregisterMesh(part.label);
+    };
+  }, [meshObj, part.label, registerMesh, unregisterMesh]);
 
   useEffect(() => {
     const tc = tcRef.current;
@@ -81,10 +92,6 @@ export function ScenePart({
         rotation={[rot.x, rot.y, rot.z]}
         scale={[sc.x, sc.y, sc.z]}
         geometry={geometry}
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelect?.(part.label, e.altKey);
-        }}
       >
         <meshStandardMaterial
           color={color}

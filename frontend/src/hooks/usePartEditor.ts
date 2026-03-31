@@ -12,6 +12,7 @@ import type {
   SelectionMode,
   Vec3,
 } from "../types";
+import { getGroupPrefix } from "../utils/groupParts";
 
 interface UsePartEditorOptions {
   currentModelId: number | null;
@@ -68,7 +69,7 @@ export function usePartEditor({ currentModelId, onPartsChange }: UsePartEditorOp
       const updatedParts: ScenePart[] = [];
       onPartsChange((prev) => {
         const next = prev.map((p) => {
-          if (p.group !== groupName) return p;
+          if (getGroupPrefix(p.label) !== groupName) return p;
           const updated = {
             ...p,
             position: {

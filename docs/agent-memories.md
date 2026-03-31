@@ -1037,3 +1037,75 @@ When saving a memory, append a new entry using this exact format:
   Any 3D editing tool with variable-size objects needs a non-spatial selection mechanism (list, search, hierarchy tree) as a fallback. Spatial selection alone fails at the extremes of object scale.
 - **Related Entries:** Users Think in Semantic Groups, TransformControls and OrbitControls Coexistence
 
+---
+
+## [2026-03-31 10:00] — Bug: TransformControls Gizmo Check Must Come Before Part Mesh Check
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Correction
+- **Tags:** #r3f #threejs #react #3d #debugging
+- **Memory:**
+  In `useSceneRaycast.ts` `handlePointerDown`, the original code checked registered part meshes **before** checking `isTransformControlsHit()`. This caused axis cones and arrow handles to be non-functional — only the center sphere (all-axes) worked.
+
+  Root cause: TransformControls axis arrows extend along their axis, physically passing through the object being moved. When clicking an axis cone, the raycast against `meshArray` found the part mesh behind the cone first, fired `onHit`, and returned early. `isTransformControlsHit()` was never called, OrbitControls was never disabled, and TC never received clean pointer events. The center sphere sat at the group origin (often not overlapping a mesh as tightly), so it occasionally worked.
+
+  **Fix**: Always call `isTransformControlsHit()` first. If a TC handle is hit, disable orbit and return. Only then check part meshes.
+
+  ```typescript
+  // CORRECT ORDER in handlePointerDown:
+  raycaster.current.setFromCamera(mouse.current, camera);
+  if (isTransformControlsHit()) { orbit.enabled = false; return; }
+  const hits = raycaster.current.intersectObjects(meshArray, false);
+  if (hits.length > 0) { onHit(...); return; }
+  onMiss();
+  ```
+- **Significance:**
+  Any time a scene has both selectable meshes and an active gizmo, the gizmo hit check must take absolute priority. The symptom ("only center handle works, axis cones don't") is subtle — it looks like a TC bug when it's actually a raycaster ordering bug. Applies to any manual raycaster that coexists with TransformControls.
+- **Related Entries:** R3F: TransformControls and OrbitControls Coexistence, Manual Raycasting Bypasses R3F Events
+
+---
+
+## [2026-03-31 10:01] — Bug: `useThree().controls` vs `__r3f` Internals for OrbitControls Access
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Correction
+- **Tags:** #r3f #threejs #react #3d #debugging
+- **Memory:**
+  A previous agent used `(gl as any).domElement?.__r3f?.root?.getState?.()?.controls` to access the OrbitControls instance at pointer-event time. This returned `null` in R3F v9 — the `__r3f` internal structure changed and this path no longer resolves.
+
+  The result: `disabledOrbit` was set to `true` but orbit was never actually disabled. OrbitControls stole `pointermove` events during TransformControls drags, causing the gizmo to feel sluggish or unresponsive (especially on axis-constrained handles where the orbit camera rotation and axis drag fought each other).
+
+  **Fix**: Destructure `controls` directly from `useThree()` at the hook level. Since `OrbitControls` uses `makeDefault`, it registers itself in R3F state synchronously on mount. By the time `SceneRaycaster` mounts (it's rendered after `OrbitControls` in `SceneCanvas`), the `controls` value is available.
+
+  ```typescript
+  const { camera, gl, scene, controls } = useThree();
+  // ...
+  if (controls) (controls as any).enabled = false;
+  ```
+
+  Add `controls` to the `useEffect` dependency array so the listener is re-registered if controls changes.
+
+- **Significance:**
+  Never access R3F internal properties via `__r3f`. They are implementation details that change across minor versions. Always use the public `useThree()` API. The `controls` field is set by `makeDefault` — this is the intended access pattern.
+- **Related Entries:** R3F: TransformControls and OrbitControls Coexistence, TC Gizmo Check Order
+
+---
+
+## [2026-03-31 10:02] — Bug: `p.group` Is Never Set on Raw State Parts — Use `getGroupPrefix(label)`
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Correction
+- **Tags:** #react #r3f #threejs #debugging #general-principle
+- **Memory:**
+  `ScenePart` has an optional `group?: string` field. Parts from the API and stored in React state have this field as `undefined` — only the output of `groupPartsByPrefix()` has `group` populated (it sets `group: prefix` on its return values).
+
+  `handleGroupTransformEnd` in `usePartEditor.ts` originally filtered parts with `if (p.group !== groupName) return p`. Since `p.group` was always `undefined` in state, the condition was always `true`, no parts were updated, state was unchanged, and React re-rendered with old positions — causing everything to snap back after a drag.
+
+  **Fix**: Use `getGroupPrefix(p.label) !== groupName` instead of `p.group !== groupName` anywhere you need to match parts by group inside a React state updater. Import from `../utils/groupParts`.
+
+  General principle: **when a derived field (like `group`) is only populated on one branch of your data flow (here: the grouped render path), don't rely on it in stateful logic that touches a different branch (here: the raw state update path).** Use the source label to derive the group deterministically.
+
+- **Significance:**
+  This was the primary cause of the "items snap back after dragging" bug. The symptom looks like a persistence issue (position not saving), but the root cause is a filtering bug that silently no-ops every state update. Future agents adding group-level state mutations must always derive group membership from `getGroupPrefix(label)`, not from `part.group`.
+- **Related Entries:** LLM Label Prefixes Encode Implicit Hierarchy, Optimistic State Update Prevents Snap-Back
+
