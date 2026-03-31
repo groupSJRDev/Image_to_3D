@@ -11,6 +11,7 @@ import { ModelLibrary } from "./components/ModelLibrary";
 import { PartProperties, GroupProperties } from "./components/PartProperties";
 import { useModels } from "./hooks/useModels";
 import { usePartEditor } from "./hooks/usePartEditor";
+import { SceneHierarchy } from "./components/SceneHierarchy";
 
 export default function App() {
   const [status, setStatus] = useState<Status>("idle");
@@ -55,6 +56,16 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [setEditMode, setSelectionMode, clearSelection]);
+
+  function handleHierarchySelectGroup(groupName: string) {
+    setSelectedGroup(groupName);
+    setSelectedLabel(null);
+  }
+
+  function handleHierarchySelectPart(label: string) {
+    setSelectedLabel(label);
+    setSelectedGroup(null);
+  }
 
   // Unified select handler — all clicks in the canvas come through here
   function handleCanvasSelect(label: string | null, altKey: boolean) {
@@ -162,8 +173,23 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel */}
         <div className="w-52 shrink-0 border-r border-gray-700 flex flex-col bg-gray-900">
-          <UploadPanel onRender={handleRender} loading={status === "loading"} />
-          <StatusBar status={status} message={errorMsg} partCount={parts.length} />
+          <div className="shrink-0">
+            <UploadPanel onRender={handleRender} loading={status === "loading"} />
+          </div>
+          <div className="shrink-0">
+            <StatusBar status={status} message={errorMsg} partCount={parts.length} />
+          </div>
+          {parts.length > 0 && (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <SceneHierarchy
+                parts={parts}
+                selectedGroup={selectedGroup}
+                selectedLabel={selectedLabel}
+                onSelectGroup={handleHierarchySelectGroup}
+                onSelectPart={handleHierarchySelectPart}
+              />
+            </div>
+          )}
         </div>
 
         {/* Canvas + properties panel */}
@@ -176,8 +202,8 @@ export default function App() {
               selectedLabel={selectedLabel}
               editMode={editMode}
               onSelect={handleCanvasSelect}
-              onTransformEnd={handleTransformEnd}
-              onGroupTransformEnd={(groupName, groupParts, delta: Vec3) =>
+              onPartDragEnd={handleTransformEnd}
+              onGroupDragEnd={(groupName, groupParts, delta: Vec3) =>
                 handleGroupTransformEnd(groupName, groupParts, delta)
               }
             />

@@ -7,7 +7,7 @@ import { PartGroup } from "./PartGroup";
 import { ModelGroup } from "./ModelGroup";
 import { Lighting } from "./Lighting";
 import { GroundGrid } from "./GroundGrid";
-import { useSceneRaycast } from "./useSceneRaycast";
+import { useSceneDrag } from "./useSceneDrag";
 
 interface Props {
   parts?: ScenePartType[];
@@ -15,10 +15,9 @@ interface Props {
   selectedGroup?: string | null;
   selectedLabel?: string | null;
   editMode?: EditMode;
-  /** Unified select: label=null means deselect, altKey=true means individual part mode */
   onSelect?: (label: string | null, altKey: boolean) => void;
-  onTransformEnd?: (label: string, pos: Vec3, rot: Vec3) => void;
-  onGroupTransformEnd?: (groupName: string, parts: ScenePartType[], delta: Vec3) => void;
+  onGroupDragEnd?: (groupName: string, parts: ScenePartType[], delta: Vec3) => void;
+  onPartDragEnd?: (label: string, pos: Vec3, rot: Vec3) => void;
 }
 
 export function SceneCanvas({
@@ -28,8 +27,8 @@ export function SceneCanvas({
   selectedLabel = null,
   editMode = "translate",
   onSelect,
-  onTransformEnd,
-  onGroupTransformEnd,
+  onGroupDragEnd,
+  onPartDragEnd,
 }: Props) {
   const isEmpty = parts.length === 0 && instances.length === 0;
   const grouped = groupPartsByPrefix(parts);
@@ -50,15 +49,15 @@ export function SceneCanvas({
           <Lighting />
           <GroundGrid />
           <OrbitControls enableDamping makeDefault target={[0, 0.8, 0]} />
-          <SceneRaycaster
+          <SceneInteraction
             grouped={grouped}
             instances={instances}
             selectedGroup={selectedGroup}
             selectedLabel={selectedLabel}
             editMode={editMode}
             onSelect={onSelect}
-            onTransformEnd={onTransformEnd}
-            onGroupTransformEnd={onGroupTransformEnd}
+            onGroupDragEnd={onGroupDragEnd}
+            onPartDragEnd={onPartDragEnd}
           />
         </CanvasErrorBoundary>
       </Canvas>
@@ -66,31 +65,34 @@ export function SceneCanvas({
   );
 }
 
-interface SceneRaycasterProps {
+interface SceneInteractionProps {
   grouped: Record<string, ScenePartType[]>;
   instances: SceneInstance[];
   selectedGroup: string | null;
   selectedLabel: string | null;
   editMode: EditMode;
   onSelect?: (label: string | null, altKey: boolean) => void;
-  onTransformEnd?: (label: string, pos: Vec3, rot: Vec3) => void;
-  onGroupTransformEnd?: (groupName: string, parts: ScenePartType[], delta: Vec3) => void;
+  onGroupDragEnd?: (groupName: string, parts: ScenePartType[], delta: Vec3) => void;
+  onPartDragEnd?: (label: string, pos: Vec3, rot: Vec3) => void;
 }
 
-// Inner component that can use useThree() (must be inside <Canvas>)
-function SceneRaycaster({
+// Inner component so useSceneDrag can call useThree() (must be inside <Canvas>)
+function SceneInteraction({
   grouped,
   instances,
   selectedGroup,
   selectedLabel,
   editMode,
   onSelect,
-  onTransformEnd,
-  onGroupTransformEnd,
-}: SceneRaycasterProps) {
-  const { registerMesh, unregisterMesh } = useSceneRaycast({
-    onHit: (label, altKey) => onSelect?.(label, altKey),
-    onMiss: () => onSelect?.(null, false),
+  onGroupDragEnd,
+  onPartDragEnd,
+}: SceneInteractionProps) {
+  const { registerMesh, unregisterMesh, registerGroup, unregisterGroup } = useSceneDrag({
+    grouped,
+    editMode,
+    onSelect: (label, altKey) => onSelect?.(label, altKey),
+    onGroupDragEnd: (groupName, parts, delta) => onGroupDragEnd?.(groupName, parts, delta),
+    onPartDragEnd: (label, pos, rot) => onPartDragEnd?.(label, pos, rot),
   });
 
   return (
@@ -102,11 +104,10 @@ function SceneRaycaster({
           parts={groupParts}
           isGroupSelected={groupName === selectedGroup}
           selectedLabel={selectedLabel}
-          editMode={editMode}
-          onTransformEnd={onTransformEnd ?? (() => {})}
-          onGroupTransformEnd={onGroupTransformEnd ?? (() => {})}
           registerMesh={registerMesh}
           unregisterMesh={unregisterMesh}
+          registerGroup={registerGroup}
+          unregisterGroup={unregisterGroup}
         />
       ))}
       {instances.map((inst) => (

@@ -1109,3 +1109,115 @@ When saving a memory, append a new entry using this exact format:
   This was the primary cause of the "items snap back after dragging" bug. The symptom looks like a persistence issue (position not saving), but the root cause is a filtering bug that silently no-ops every state update. Future agents adding group-level state mutations must always derive group membership from `getGroupPrefix(label)`, not from `part.group`.
 - **Related Entries:** LLM Label Prefixes Encode Implicit Hierarchy, Optimistic State Update Prevents Snap-Back
 
+
+---
+
+## [2026-03-30 14:00] — Architecture: Replace R3F Events with Manual Raycasting When `<primitive>` Objects Exist
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Decision
+- **Tags:** #threejs #r3f #raycasting #debugging #architecture #general-principle
+- **Memory:**
+  R3F's built-in `onClick` event system raycasts against the **entire scene graph**, including `<primitive>` objects that have no R3F event metadata. When `GroundGrid` injects ~80 unmanaged Three.js objects via `<primitive>` (floor plane, grid lines, axis lines), those objects intercept raycasts before they reach model meshes. Even setting `plane.raycast = () => {}` on the floor plane doesn't fix it — `<primitive>` children still sit in the traversal path.
+
+  **Fix**: Replace `onClick` on `<mesh>` with a manual raycaster hook (`useSceneDrag`) that only tests an explicit `Map<string, THREE.Mesh>` of registered part meshes — exactly the approach used by the working vanilla Three.js prototype. Parts register themselves via `useEffect` on mount; the hook's `pointerdown` listener ignores everything else in the scene.
+
+  **Rejected alternatives:**
+  - Setting `raycast = () => {}` on primitive objects: doesn't fix R3F's event routing
+  - `onPointerMissed` on Canvas: doesn't solve the interception problem, only the miss case
+
+- **Significance:**
+  This is the root cause of the "clicking objects does nothing" bug. General principle: **when `<primitive>` objects exist in an R3F scene, never rely on R3F's event system for raycasting.** Use a manual raycaster against an explicit mesh list.
+- **Related Entries:** Bug: TransformControls Gizmo Check Must Come Before Part Mesh Check
+
+---
+
+## [2026-03-31 14:00] — Architecture: Replace TransformControls with Vanilla Drag Plane
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Decision
+- **Tags:** #threejs #r3f #architecture #debugging #general-principle
+- **Memory:**
+  `@react-three/drei`'s `TransformControls` causes multiple compounding bugs when used for simple pick-and-move interactions:
+  1. Invisible camera-filling drag plane blocks all raycasts after first selection → re-selection impossible
+  2. Axis cone clicks intercepted by part mesh hit test → TC never activates
+  3. OrbitControls disable unreliable via `__r3f` internals (broken in R3F v9)
+  4. Gizmo placement requires bounding-box center math + local-space conversion
+
+  **Fix**: Replace with vanilla drag plane approach — three DOM event listeners (`pointerdown`, `pointermove`, `pointerup`) + a `THREE.Plane` at the object's Y level. No invisible geometry added to the scene. Orbit disable is immediate and unconditional (off on down, on on up/leave). This matches the working vanilla Three.js prototype exactly.
+
+  The new `useSceneDrag` hook consolidates: selection, drag, rotation, orbit management. Components only register meshes and groups; all interaction logic lives in one place.
+
+  **Rejected alternative**: Fixing TransformControls bugs incrementally — each fix introduced new issues; TC is designed for professional 3D editors, not simple pick-and-move.
+
+- **Significance:**
+  TC is the wrong tool for pick-and-move UX. General principle: **match the complexity of the interaction tool to the complexity of the interaction model.** A drag plane + three event listeners beats a sophisticated gizmo system when the UX is just "click and slide."
+- **Related Entries:** Architecture: Replace R3F Events with Manual Raycasting
+
+---
+
+## [2026-03-31 14:01] — Docker: `make restart` Does Not Clear Layer Cache — Use `--no-cache` for Layer Corruption
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Insight
+- **Tags:** #docker #debugging #general-principle
+- **Memory:**
+  `make restart` runs `docker compose down && docker compose up --build -d`. The `--build` flag rebuilds images but **reuses cached layers**. When Docker's layer cache is corrupted (error: `parent snapshot sha256:... does not exist: not found`), `--build` alone fails.
+
+  **Fix**: `docker compose build --no-cache frontend` forces a full layer rebuild from scratch. Then `docker compose up -d` starts the container normally.
+
+  `make restart` is sufficient for normal code changes. `--no-cache` is only needed after cache corruption (rare, usually caused by storage driver issues or interrupted pulls).
+
+- **Significance:**
+  Prevents wasted time chasing code bugs when the real issue is a corrupted build cache. If `make restart` fails with a snapshot/layer error, go straight to `--no-cache`.
+- **Related Entries:** None
+
+---
+
+## [2026-03-31 14:02] — React/Flex: Scrollable Panel Inside Flex Column Requires `min-h-0` on All Flex Ancestors
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Insight
+- **Tags:** #react #ui #debugging #general-principle
+- **Memory:**
+  A `flex-1 overflow-y-auto` panel inside a flex column does **not** scroll if any ancestor flex item is missing `min-h-0`. By default, flex items have `min-height: auto`, which means they expand to fit their content — making `overflow-y-auto` effectively `overflow-y: visible`.
+
+  To make a panel scrollable within a flex column:
+  1. Every ancestor flex item between the panel and the bounded root must have `min-h-0` (or explicit height).
+  2. The scrollable panel itself needs `flex-1 min-h-0 overflow-y-auto`.
+  3. Siblings that should not grow must be `shrink-0`.
+
+  In this project: `UploadPanel` had `h-full` internally, consuming all sidebar height. `StatusBar` lacked `shrink-0`. The `SceneHierarchy` wrapper div needed `flex flex-col` (not just `flex-1 min-h-0`) so `SceneHierarchy`'s internal `flex-1` had a proper flex container to grow into.
+
+- **Significance:**
+  This is one of the most common sources of "my panel doesn't scroll" bugs in flex layouts. General principle: **`overflow-y-auto` only works when the element has a bounded height — which in a flex column means every ancestor must explicitly give up auto-sizing via `min-h-0`.**
+- **Related Entries:** None
+
+---
+
+## [2026-03-31 14:03] — Pattern: `useEffect` Ref Sync for Hot Closures in Event Hooks
+
+- **Agent/Model:** Claude Sonnet 4.6
+- **Category:** Insight
+- **Tags:** #react #threejs #general-principle #architecture
+- **Memory:**
+  When a `useEffect` registers DOM event listeners that call React callbacks (e.g. `onSelect`, `onGroupDragEnd`), those callbacks will be stale closures if the `useEffect` dep array doesn't include them — causing it to re-bind listeners on every render. But re-binding on every render causes flickering and drops in-progress drags.
+
+  **Pattern**: Store all frequently-changing callbacks in refs that are updated on every render, then reference those refs inside a single stable `useEffect`:
+
+  ```typescript
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect; // updated every render, no useEffect needed
+
+  useEffect(() => {
+    // stable listener — always reads latest callback via ref
+    canvas.addEventListener("pointerdown", (e) => onSelectRef.current(...));
+  }, [camera, gl, controls]); // only re-bind when canvas/camera changes
+  ```
+
+  Used in `useSceneDrag.ts` for `grouped`, `editMode`, `onSelect`, `onGroupDragEnd`, `onPartDragEnd`.
+
+- **Significance:**
+  Prevents stale closures without the instability of re-binding event listeners on every render. General principle: **for long-lived event listeners that call React callbacks, use the ref-sync pattern rather than listing callbacks in the dep array.**
+- **Related Entries:** Architecture: Replace TransformControls with Vanilla Drag Plane
+
